@@ -3,3 +3,4 @@ venv/
 *.xlsx
 .idea
 .~lock.*
+.DS_Store
