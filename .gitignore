@@ -1,5 +1,6 @@
 venv/
 
+.env
 *.xlsx
 .idea
 .~lock.*
