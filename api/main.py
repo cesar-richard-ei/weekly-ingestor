@@ -9,6 +9,10 @@ import httpx
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from timely_to_excel import TimelyReport
 
 # Configuration
 load_dotenv()
@@ -17,11 +21,22 @@ OAUTH_CLIENT_ID = os.getenv("TIMELY_API_OAUTH_CLIENT_ID")
 OAUTH_CLIENT_SECRET = os.getenv("TIMELY_API_OAUTH_SECRET")
 TIMELY_EMAIL = os.getenv("TIMELY_EMAIL")
 TIMELY_PASSWORD = os.getenv("TIMELY_PASSWORD")
+TIMELY_ACCOUNT_ID = os.getenv("TIMELY_ACCOUNT_ID")
+API_URL = os.getenv("API_URL")
 
 app = FastAPI(
     title="Timely Events API",
     description="API simplifiée pour récupérer les événements Timely",
     version="1.0.0",
+)
+
+# Configuration CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En prod, il faudrait spécifier les domaines exacts
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -98,3 +113,39 @@ async def list_events(
     - page: Numéro de page (défaut: 1)
     """
     return await timely_client.get_events(account_id, since, upto, page)
+
+
+class ReportRequest(BaseModel):
+    from_date: str
+    to_date: str
+
+
+@app.post("/generate-report")
+async def generate_report(request: ReportRequest):
+    """Génère un rapport Excel pour la période donnée"""
+    try:
+        report = TimelyReport(TIMELY_ACCOUNT_ID, API_URL)
+        # Récupérer tous les événements
+        events = await report.get_events(request.from_date, request.to_date)
+        # Filtrer pour ne garder que les événements Pasqal
+        filtered_events = report.filter_events_by_client(events, "Pasqal")
+        # Traiter les événements filtrés
+        data = report.process_events(filtered_events, request.from_date, request.to_date)
+        
+        # Générer le fichier Excel en mémoire
+        output = BytesIO()
+        report.generate_excel(data, output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=imputations_{request.from_date[5:7].lower()}_{request.from_date[2:4]}.xlsx"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la génération du rapport: {str(e)}"
+        )

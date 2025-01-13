@@ -49,6 +49,13 @@ class TimelyReport:
 
             return all_events
 
+    def filter_events_by_client(self, events: List[Dict], client_name: str) -> List[Dict]:
+        """Filtre les événements pour ne garder que ceux du client spécifié"""
+        return [
+            event for event in events
+            if event.get("project", {}).get("client", {}).get("name", "") == client_name
+        ]
+
     def process_events(
         self, events: List[Dict], from_date: str, to_date: str
     ) -> Dict[datetime, List[Tuple[str, str]]]:

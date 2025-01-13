@@ -1,7 +1,25 @@
-venv/
-
+# Environment variables
 .env
-*.xlsx
-.idea
-.~lock.*
+
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
+Thumbs.db
