@@ -18,8 +18,15 @@ RUN if [ "$BUILD_MODE" = "production" ]; then \
 FROM nginx:alpine-slim AS production
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY docker-entrypoint.sh /
-RUN chmod +x /docker-entrypoint.sh
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+# Fix permissions
+RUN chmod +x /docker-entrypoint.sh && \
+    chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
+
+USER nginx
+
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
 
