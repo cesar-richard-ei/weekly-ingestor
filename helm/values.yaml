@@ -64,6 +64,7 @@ frontend:
       memory: 128Mi
   env:
     VITE_API_URL: "https://weekly-ingestor.crichard.fr/api"
+    API_HOST: "weekly-ingestor-api"
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000

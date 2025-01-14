@@ -13,7 +13,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      target: development
+      target: ${BUILD_TARGET:-development}
     ports:
       - "80:80"
       - "5173:5173"
@@ -21,6 +21,7 @@ services:
       - .env
     environment:
       - VITE_API_URL=${VITE_API_URL}
+      - API_HOST=api
     volumes:
       - ./frontend:/app
       - /app/node_modules
