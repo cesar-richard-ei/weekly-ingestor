@@ -15,7 +15,7 @@ RUN if [ "$BUILD_MODE" = "production" ]; then \
     fi
 
 # Multi-stage build pour la production uniquement
-FROM nginx:slim AS production
+FROM nginx:alpine-slim AS production
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /
