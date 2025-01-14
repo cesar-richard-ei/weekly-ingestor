@@ -3,12 +3,12 @@ name: Build and Push Docker Images
 on:
   push:
     branches:
-      - master
+      - main
     tags:
       - 'v*'
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   build-and-push:
@@ -78,9 +78,9 @@ jobs:
   # deploy:
   #   needs: build-and-push
   #   runs-on:
-  #     - self-hosted
-  #     - production
-  #   if: github.ref == 'refs/heads/master'
+    #   - self-hosted
+    #   - production
+    # if: github.ref == 'refs/heads/main'
 
   #   steps:
   #     - name: Checkout repository
