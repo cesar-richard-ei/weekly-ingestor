@@ -20,6 +20,8 @@ spec:
         sidecar.istio.io/rewriteAppHTTPProbers: "true"
     spec:
       serviceAccountName: {{ .Values.frontend.name }}
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: {{ .Values.frontend.name }}
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"

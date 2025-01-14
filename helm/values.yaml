@@ -23,7 +23,7 @@ api:
   name: weekly-ingestor-api
   replicaCount: 1
   image:
-    repository: PLACEHOLDER_API_IMAGE
+    repository: ghcr.io/cesar-richard-ei/weekly-ingestor/weekly-ingestor-backend
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -47,7 +47,7 @@ frontend:
   name: weekly-ingestor-frontend
   replicaCount: 1
   image:
-    repository: PLACEHOLDER_FRONTEND_IMAGE
+    repository: ghcr.io/cesar-richard-ei/weekly-ingestor/weekly-ingestor-frontend
     tag: latest
     pullPolicy: IfNotPresent
   service:

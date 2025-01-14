@@ -14,13 +14,13 @@ spec:
       mode: SIMPLE
       credentialName: {{ .Release.Name }}-tls
     hosts:
-    - "weekly-ingestor.crichard.fr"
+    - {{ .Values.global.domain | quote }}
   - port:
       number: 80
       name: http
       protocol: HTTP
     hosts:
-    - "weekly-ingestor.crichard.fr"
+    - {{ .Values.global.domain | quote }}
     tls:
       httpsRedirect: true
 ---
