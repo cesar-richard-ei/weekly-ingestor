@@ -1,0 +1,25 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Values.frontend.name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.frontend.name }}
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/*/sa/istio-ingressgateway-service-account"]
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Values.api.name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.api.name }}
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/{{ .Release.Namespace }}/sa/{{ .Values.frontend.name }}"] 

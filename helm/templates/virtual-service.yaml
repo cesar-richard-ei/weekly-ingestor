@@ -1,0 +1,47 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: projito-virtualservice
+  namespace: projito
+spec:
+  hosts:
+  - weekly-ingestor.crichard.fr
+  gateways:
+  - {{ .Release.Name }}-gateway
+  http:
+  - match:
+    - port: {{ .Values.frontend.service.port }}
+      uri:
+        prefix: /
+    redirect:
+      scheme: https
+      authority: weekly-ingestor.crichard.fr
+  - match:
+    - uri:
+        prefix: /api
+    route:
+    - destination:
+        host: {{ .Values.backend.name }}
+        port:
+          number: {{ .Values.backend.service.port }}
+  - match:
+    - uri:
+        prefix: /static
+    route:
+    - destination:
+        host: {{ .Values.backend.name }}
+        port:
+          number: {{ .Values.backend.service.port }}
+  - match:
+    - uri:
+        prefix: /ws
+    route:
+    - destination:
+        host: {{ .Values.backend.name }}
+        port:
+          number: {{ .Values.backend.service.port }}
+  - route:
+    - destination:
+        host: {{ .Values.frontend.name }}
+        port:
+          number: {{ .Values.frontend.service.port }}

@@ -1,0 +1,70 @@
+global:
+  environment: production
+  domain: "weekly-ingestor.crichard.fr"
+
+istio:
+  enabled: true
+  mtls:
+    mode: STRICT
+  gateway:
+    selector:
+      istio: ingressgateway
+    tls:
+      enabled: true
+      mode: SIMPLE
+
+certManager:
+  enabled: true
+  issuer:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+api:
+  name: weekly-ingestor-api
+  replicaCount: 1
+  image:
+    repository: PLACEHOLDER_API_IMAGE
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  env:
+    API_URL: "https://weekly-ingestor.crichard.fr/api"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+
+frontend:
+  name: weekly-ingestor-frontend
+  replicaCount: 1
+  image:
+    repository: PLACEHOLDER_FRONTEND_IMAGE
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false  # On utilise Istio Gateway à la place
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  env:
+    VITE_API_URL: "https://weekly-ingestor.crichard.fr/api"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false 

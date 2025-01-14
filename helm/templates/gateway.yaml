@@ -1,0 +1,26 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: {{ .Release.Name }}-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: {{ .Release.Name }}-tls
+    hosts:
+    - "weekly-ingestor.crichard.fr"
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "weekly-ingestor.crichard.fr"
+    tls:
+      httpsRedirect: true
+---
