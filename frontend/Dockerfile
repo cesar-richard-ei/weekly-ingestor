@@ -16,11 +16,21 @@ RUN if [ "$BUILD_MODE" = "production" ]; then \
 
 # Multi-stage build pour la production uniquement
 FROM nginx:alpine-slim AS production
+
+# Créer les répertoires nécessaires et définir les permissions
+RUN mkdir -p /usr/share/nginx/html && \
+    chown -R nginx:nginx /usr/share/nginx && \
+    chmod -R 755 /usr/share/nginx && \
+    mkdir -p /tmp && \
+    chown -R nginx:nginx /tmp && \
+    chmod -R 777 /tmp
+
+# Copier les fichiers
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
-# Fix permissions
+# Fix permissions finales
 RUN chmod +x /docker-entrypoint.sh && \
     chown -R nginx:nginx /usr/share/nginx/html && \
     chmod -R 755 /usr/share/nginx/html
