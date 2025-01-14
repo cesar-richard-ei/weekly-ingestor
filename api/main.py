@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 from io import BytesIO
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from timely_to_excel import TimelyReport
 
@@ -149,3 +149,8 @@ async def generate_report(request: ReportRequest):
             status_code=500,
             detail=f"Erreur lors de la génération du rapport: {str(e)}"
         )
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "OK"}, status_code=200)
