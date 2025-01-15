@@ -65,13 +65,13 @@ jobs:
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
-        env:
-          VITE_BACKEND_URL: https://weekly-ingestor.crichard.fr/api/
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           target: production
           push: true
+          build-args: |
+            VITE_API_URL=https://weekly-ingestor.crichard.fr/api/
           tags: |
             ghcr.io/${{ github.repository_owner }}/weekly-ingestor/weekly-ingestor-frontend:latest
             ghcr.io/${{ github.repository_owner }}/weekly-ingestor/weekly-ingestor-frontend:sha-${{ github.sha }}
