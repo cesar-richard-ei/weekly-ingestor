@@ -152,7 +152,7 @@ export default function ReportGenerator() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {previewData.map((row, index) => {
+                {previewData.map((row: PreviewData, index: number) => {
                   const style = getRowStyle(row.type);
                   return (
                     <TableRow 
