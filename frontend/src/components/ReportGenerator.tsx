@@ -35,6 +35,13 @@ export default function ReportGenerator() {
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData[] | null>(null);
 
+  const calculateTotalDuration = (data: PreviewData[]) => {
+    return data
+      .filter(row => row.type === 'work' || row.type === 'half_off')
+      .reduce((acc, row) => acc + parseFloat(row.duration), 0)
+      .toFixed(2);
+  };
+
   const getRowStyle = (type: PreviewData['type']) => {
     switch (type) {
       case 'weekend':
@@ -166,6 +173,14 @@ export default function ReportGenerator() {
                     </TableRow>
                   );
                 })}
+                <TableRow sx={{ 
+                  backgroundColor: theme.palette.grey[100],
+                  fontWeight: 'bold'
+                }}>
+                  <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(previewData)}</TableCell>
+                  <TableCell />
+                </TableRow>
               </TableBody>
             </Table>
           </TableContainer>
