@@ -10,8 +10,5 @@ Common authorization rules for API access
       remoteIpBlocks: ["192.168.1.254/32"]  # IP locale (via box)
 - from:
   - source:
-      remoteIpBlocks: ["78.245.207.135/32"]  # IP mobile
-- from:
-  - source:
       remoteIpBlocks: ["10.0.0.0/8"]  # Pour le trafic interne du cluster
 {{- end }} 
