@@ -76,35 +76,3 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/weekly-ingestor/weekly-ingestor-frontend:latest
             ghcr.io/${{ github.repository_owner }}/weekly-ingestor/weekly-ingestor-frontend:sha-${{ github.sha }}
 
-  # deploy:
-  #   needs: build-and-push
-  #   runs-on:
-    #   - self-hosted
-    #   - production
-    # if: github.ref == 'refs/heads/main'
-
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-
-  #     - name: Install Helm
-  #       uses: azure/setup-helm@v4
-  #       with:
-  #         version: 'latest'
-
-  #     - name: Configure Kubernetes
-  #       uses: azure/k8s-set-context@v4
-  #       with:
-  #         method: kubeconfig
-  #         kubeconfig: ${{ secrets.CI_KUBE_CONFIG }}
-        
-  #     - name: Deploy with Helm
-  #       run: |
-  #         helm upgrade --install weekly-ingestor ./helm-chart/weekly-ingestor \
-  #           --namespace weekly-ingestor \
-  #           --wait \
-  #           --timeout 5m \
-  #           --atomic \
-  #           --cleanup-on-fail \
-  #           --set frontend.image.tag=sha-${{ github.sha }} \
-  #           --set backend.image.tag=sha-${{ github.sha }}

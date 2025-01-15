@@ -1,58 +1,44 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.api.name }}
+  name: {{ .Release.Name }}-api
   labels:
-    app: {{ .Values.api.name }}
-    version: v1
+    app: {{ .Release.Name }}-api
 spec:
   replicas: {{ .Values.api.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Values.api.name }}
+      app: {{ .Release.Name }}-api
   template:
     metadata:
       labels:
-        app: {{ .Values.api.name }}
-        version: v1
-        sidecar.istio.io/inject: "true"
-      annotations:
-        sidecar.istio.io/rewriteAppHTTPProbers: "true"
+        app: {{ .Release.Name }}-api
     spec:
       serviceAccountName: {{ .Values.api.name }}
       imagePullSecrets:
         - name: ghcr-secret
       containers:
-        - name: {{ .Values.api.name }}
+        - name: {{ .Release.Name }}-api
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 8000
               protocol: TCP
-          env:
-            {{- range $key, $value := .Values.api.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
+          envFrom:
+            - secretRef:
+                name: weekly-ingestor-env
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL 
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }} 
