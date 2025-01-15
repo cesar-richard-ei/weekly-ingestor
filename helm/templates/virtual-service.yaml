@@ -21,6 +21,15 @@ spec:
         prefix: "/api/"
     rewrite:
       uri: "/"
+    headers:
+      request:
+        set:
+          x-debug-forwarded-for: "%REQ(X-FORWARDED-FOR)%"
+          x-debug-source-ip: "%DOWNSTREAM_REMOTE_ADDRESS%"
+          x-debug-real-ip: "%REQ(X-REAL-IP)%"
+          x-debug-remote-addr: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+          x-debug-original-dst: "%REQUESTED_SERVER_NAME%"
+          x-debug-protocol: "%PROTOCOL%"
     route:
     - destination:
         host: {{ .Values.api.name }}
@@ -29,6 +38,15 @@ spec:
   - match:
     - uri:
         prefix: "/"
+    headers:
+      request:
+        set:
+          x-debug-forwarded-for: "%REQ(X-FORWARDED-FOR)%"
+          x-debug-source-ip: "%DOWNSTREAM_REMOTE_ADDRESS%"
+          x-debug-real-ip: "%REQ(X-REAL-IP)%"
+          x-debug-remote-addr: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+          x-debug-original-dst: "%REQUESTED_SERVER_NAME%"
+          x-debug-protocol: "%PROTOCOL%"
     route:
     - destination:
         host: {{ .Values.frontend.name }}
