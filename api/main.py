@@ -118,11 +118,12 @@ async def list_events(
 class ReportRequest(BaseModel):
     from_date: str
     to_date: str
+    format: str = "excel"  # "excel" ou "json"
 
 
 @app.post("/generate-report")
 async def generate_report(request: ReportRequest):
-    """Génère un rapport Excel pour la période donnée"""
+    """Génère un rapport pour la période donnée au format Excel ou JSON"""
     try:
         report = TimelyReport(TIMELY_ACCOUNT_ID, API_URL)
         # Récupérer tous les événements
@@ -132,6 +133,43 @@ async def generate_report(request: ReportRequest):
         # Traiter les événements filtrés
         data = report.process_events(filtered_events, request.from_date, request.to_date)
         
+        if request.format == "json":
+            # Transformer les données au format attendu par le frontend
+            formatted_data = []
+            for date, entries in sorted(data.items()):
+                if not entries:
+                    formatted_data.append({
+                        "date": date.strftime("%d/%m/%Y"),
+                        "project": "",
+                        "duration": "0",
+                        "description": "",
+                        "type": "empty"
+                    })
+                elif entries[0][1] == "WEEKEND":
+                    formatted_data.append({
+                        "date": date.strftime("%d/%m/%Y"),
+                        "project": "",
+                        "duration": "0",
+                        "description": "WEEKEND",
+                        "type": "weekend"
+                    })
+                else:
+                    # Vérifier si c'est un jour OFF complet ou une demi-journée
+                    all_off = all(note[1].strip() == "OFF" for note in entries)
+                    has_off = any(note[1].strip() == "OFF" for note in entries)
+                    
+                    formatted_data.append({
+                        "date": date.strftime("%d/%m/%Y"),
+                        "project": "Pasqal",
+                        "duration": "0" if all_off else "0.5" if has_off else "1",
+                        "description": "\n\n".join(
+                            f"{prefix} {note}" if prefix else note 
+                            for prefix, note in entries
+                        ),
+                        "type": "off" if all_off else "half_off" if has_off else "work"
+                    })
+            return JSONResponse(content=formatted_data)
+            
         # Générer le fichier Excel en mémoire
         output = BytesIO()
         report.generate_excel(data, output)
@@ -141,7 +179,8 @@ async def generate_report(request: ReportRequest):
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f"attachment; filename=imputations_{request.from_date[5:7].lower()}_{request.from_date[2:4]}.xlsx"
+                "Content-Disposition": f"attachment; filename=imputations_"
+                f"{request.from_date[5:7].lower()}_{request.from_date[2:4]}.xlsx"
             }
         )
     except Exception as e:
