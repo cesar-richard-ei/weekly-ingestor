@@ -8,15 +8,7 @@ spec:
       app: {{ .Values.frontend.name }}
   action: ALLOW
   rules:
-  - from:
-    - source:
-        principals: ["cluster.local/ns/{{ .Release.Namespace }}/sa/{{ .Values.frontend.name }}"]
-  - from:
-    - source:
-        remoteIpBlocks: ["192.168.1.254/32"]  # IP interne
-  - from:
-    - source:
-        remoteIpBlocks: ["10.0.0.0/8"]  # Pour le trafic interne du cluster
+  - {}  # Allow all traffic to frontend
 ---
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -28,13 +20,5 @@ spec:
       app: {{ .Values.api.name }}
   action: ALLOW
   rules:
-  - from:
-    - source:
-        principals: ["cluster.local/ns/{{ .Release.Namespace }}/sa/{{ .Values.frontend.name }}"]
-  - from:
-    - source:
-        remoteIpBlocks: ["192.168.1.254/32"]  # IP interne
-  - from:
-    - source:
-        remoteIpBlocks: ["10.0.0.0/8"]  # Pour le trafic interne du cluster
+  {{- include "weekly-ingestor.auth-rules" . | nindent 2 }}
   
