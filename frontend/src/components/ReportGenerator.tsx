@@ -18,8 +18,9 @@ import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
 import axios from 'axios';
 import { API_URL } from '../config';
+import ReportStats from './ReportStats';
 
-interface PreviewData {
+export interface PreviewData {
   date: string;
   project: string;
   duration: string;
@@ -141,49 +142,52 @@ export default function ReportGenerator() {
         </Stack>
 
         {previewData && previewData.length > 0 && (
-          <TableContainer component={Paper} sx={{ maxHeight: 440 }}>
-            <Table stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Projet</TableCell>
-                  <TableCell align="right">Durée (j)</TableCell>
-                  <TableCell>Description</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {previewData.map((row: PreviewData, index: number) => {
-                  const style = getRowStyle(row.type);
-                  return (
-                    <TableRow 
-                      key={index}
-                      sx={style}
-                    >
-                      <TableCell>{row.date}</TableCell>
-                      <TableCell>{row.project}</TableCell>
-                      <TableCell align="right">{row.duration}</TableCell>
-                      <TableCell 
-                        sx={{ 
-                          whiteSpace: 'pre-line',
-                          color: style?.color
-                        }}
+          <>
+            <ReportStats data={previewData} dailyRate={323} />
+            <TableContainer component={Paper} sx={{ maxHeight: 440 }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Projet</TableCell>
+                    <TableCell align="right">Durée (j)</TableCell>
+                    <TableCell>Description</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {previewData.map((row: PreviewData, index: number) => {
+                    const style = getRowStyle(row.type);
+                    return (
+                      <TableRow 
+                        key={index}
+                        sx={style}
                       >
-                        {row.description}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                <TableRow sx={{ 
-                  backgroundColor: theme.palette.grey[100],
-                  fontWeight: 'bold'
-                }}>
-                  <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(previewData)}</TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
+                        <TableCell>{row.date}</TableCell>
+                        <TableCell>{row.project}</TableCell>
+                        <TableCell align="right">{row.duration}</TableCell>
+                        <TableCell 
+                          sx={{ 
+                            whiteSpace: 'pre-line',
+                            color: style?.color
+                          }}
+                        >
+                          {row.description}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  <TableRow sx={{ 
+                    backgroundColor: theme.palette.grey[100],
+                    fontWeight: 'bold'
+                  }}>
+                    <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(previewData)}</TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
         )}
         
         {previewData && previewData.length === 0 && (
