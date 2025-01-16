@@ -11,7 +11,6 @@ interface ReportStatsProps {
 
 export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
   // Calcul des statistiques
-  const totalDays = data.length;
   const workDays = data.filter(d => d.type === 'work').length;
   const halfDays = data.filter(d => d.type === 'half_off').length;
   const offDays = data.filter(d => d.type === 'off').length;
@@ -79,7 +78,7 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
                 outerRadius={30}
                 label={(entry) => `${entry.name}: ${entry.value}`}
               >
-                {pieData.map((entry, index) => (
+                {pieData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
