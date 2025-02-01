@@ -49,7 +49,6 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
   const halfDays = Object.values(statsByDate).reduce((acc, curr) => acc + curr.halfDays, 0);
   const offDays = data.filter(d => d.type === 'off' || (d.type === 'work' && d.duration === '0')).length;
   const weekendDays = data.filter(d => d.type === 'weekend').length;
-  const emptyDays = data.filter(d => d.type === 'empty').length;
 
   // Calcul des jours non saisis (hors weekends et jours fériés)
   const nonFilledDays = data.filter(d => {
@@ -73,16 +72,16 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
     { name: 'Week-ends', value: weekendDays },
   ];
 
-  // Données pour le graphique en barres (projets)
-  const projectStats = data
+  // Données pour le graphique en barres (clients)
+  const clientStats = data
     .filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0')
     .reduce((acc: { [key: string]: number }, curr) => {
-      const projectName = curr.project || 'Sans projet';
-      acc[projectName] = (acc[projectName] || 0) + parseFloat(curr.duration);
+      const clientName = curr.client || 'Sans client';
+      acc[clientName] = (acc[clientName] || 0) + parseFloat(curr.duration);
       return acc;
     }, {});
 
-  const barData = Object.entries(projectStats)
+  const barData = Object.entries(clientStats)
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
