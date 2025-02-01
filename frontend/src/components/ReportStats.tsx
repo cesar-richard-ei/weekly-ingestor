@@ -1,6 +1,8 @@
 import { Paper, Grid, Typography, Box, Alert } from '@mui/material';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PreviewData } from './ReportGenerator';
+import Holidays from 'date-holidays';
+import { parse, isWeekend } from 'date-fns';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -10,6 +12,9 @@ interface ReportStatsProps {
 }
 
 export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
+  // Initialisation du calendrier des jours fériés français
+  const hd = new Holidays('FR');
+
   // Calcul des statistiques
   const workDays = data.filter(d => d.type === 'work').length;
   const halfDays = data.filter(d => d.type === 'half_off').length;
@@ -17,8 +22,14 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
   const weekendDays = data.filter(d => d.type === 'weekend').length;
   const emptyDays = data.filter(d => d.type === 'empty').length;
 
-  // Calcul des jours non saisis (hors weekends)
-  const nonFilledDays = data.filter(d => d.type === 'empty').length;
+  // Calcul des jours non saisis (hors weekends et jours fériés)
+  const nonFilledDays = data.filter(d => {
+    if (d.type !== 'empty') return false;
+    const date = parse(d.date, 'dd/MM/yyyy', new Date());
+    if (isWeekend(date)) return false;
+    const isHoliday = hd.isHoliday(date);
+    return !isHoliday;
+  }).length;
 
   const totalWorkHours = data
     .filter(d => d.type === 'work' || d.type === 'half_off')
@@ -50,7 +61,7 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
     <Paper sx={{ p: 3, mb: 3 }}>
       {nonFilledDays > 0 && (
         <Alert severity="warning" sx={{ mb: 3 }}>
-          {nonFilledDays} jour{nonFilledDays > 1 ? 's' : ''} non saisi{nonFilledDays > 1 ? 's' : ''} sur la période sélectionnée (hors weekends)
+          {nonFilledDays} jour{nonFilledDays > 1 ? 's' : ''} non saisi{nonFilledDays > 1 ? 's' : ''} sur la période sélectionnée (hors weekends et jours fériés)
         </Alert>
       )}
       <Typography variant="h6" gutterBottom>

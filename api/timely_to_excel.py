@@ -10,12 +10,15 @@ import os
 from dotenv import load_dotenv
 import openpyxl
 from typing import Dict, List, Tuple
+import holidays
 
 # Configuration
 load_dotenv()
 TIMELY_ACCOUNT_ID = os.getenv("TIMELY_ACCOUNT_ID")
 API_BASE_URL = "http://localhost:8000"
 
+# Initialisation des jours fériés français
+fr_holidays = holidays.FR()
 
 class TimelyReport:
     """Gestionnaire de rapports Timely"""
@@ -56,6 +59,24 @@ class TimelyReport:
             if event.get("project", {}).get("client", {}).get("name", "") == client_name
         ]
 
+    @staticmethod
+    def _is_weekend(date: datetime) -> bool:
+        """Vérifie si une date est un weekend"""
+        return date.weekday() >= 5
+
+    @staticmethod
+    def _is_holiday(date: datetime) -> bool:
+        """Vérifie si une date est un jour férié"""
+        return date in fr_holidays
+
+    @staticmethod
+    def _get_dates_range(from_date: str, to_date: str) -> List[datetime]:
+        """Génère la liste des dates dans l'intervalle"""
+        start = datetime.strptime(from_date, "%Y-%m-%d")
+        end = datetime.strptime(to_date, "%Y-%m-%d")
+        delta = (end - start).days + 1
+        return [start + timedelta(days=x) for x in range(delta)]
+
     def process_events(
         self, events: List[Dict], from_date: str, to_date: str
     ) -> Dict[datetime, List[Tuple[str, str]]]:
@@ -64,14 +85,20 @@ class TimelyReport:
 
         # Initialiser toutes les dates
         for date in self._get_dates_range(from_date, to_date):
-            data_by_date[date] = [("", "WEEKEND")] if self._is_weekend(date) else []
+            if self._is_weekend(date):
+                data_by_date[date] = [("", "WEEKEND")]
+            elif self._is_holiday(date):
+                data_by_date[date] = [("", "HOLIDAY")]
+            else:
+                data_by_date[date] = []
 
         # Ajouter les événements
         for event in events:
             date = datetime.strptime(event["day"], "%Y-%m-%d")
-            if not self._is_weekend(date):
-                project_name = event.get("project", {}).get("name", "")
-                prefix = f"[{project_name}]" if project_name in ["CI", "DevOps"] else ""
+            if not (self._is_weekend(date) or self._is_holiday(date)):
+                project = event.get("project", {}).get("name", "")
+                is_special = project in ["CI", "DevOps"]
+                prefix = f"[{project}]" if is_special else ""
                 data_by_date[date].append((prefix, event.get("note", "")))
 
         return data_by_date
@@ -88,28 +115,18 @@ class TimelyReport:
 
         workbook.save(output_path)
 
-    @staticmethod
-    def _is_weekend(date: datetime) -> bool:
-        """Vérifie si une date est un weekend"""
-        return date.weekday() >= 5
-
-    @staticmethod
-    def _get_dates_range(from_date: str, to_date: str) -> List[datetime]:
-        """Génère la liste des dates dans l'intervalle"""
-        start = datetime.strptime(from_date, "%Y-%m-%d")
-        end = datetime.strptime(to_date, "%Y-%m-%d")
-        return [start + timedelta(days=x) for x in range((end - start).days + 1)]
-
-    @staticmethod
-    def _write_row(sheet, row: int, date: datetime, entries: List[Tuple[str, str]]):
+    def _write_row(
+        self, sheet, row: int, date: datetime, entries: List[Tuple[str, str]]
+    ):
         """Écrit une ligne dans le fichier Excel"""
         notes = []
         for prefix, note in entries:
-            if note == "WEEKEND":
+            if note in ["WEEKEND", "HOLIDAY"]:
                 notes = [note]
                 break
             note_lines = note.split("\n")
-            note_lines[0] = f"{prefix} {note_lines[0]}" if prefix else note_lines[0]
+            if prefix:
+                note_lines[0] = f"{prefix} {note_lines[0]}"
             notes.append("\n".join(note_lines))
 
         cell_value = "\n\n".join(notes)
@@ -118,7 +135,7 @@ class TimelyReport:
         sheet.cell(row=row, column=1, value=date.strftime("%d/%m/%Y"))
 
         if notes:
-            if notes[0] == "WEEKEND":
+            if notes[0] in ["WEEKEND", "HOLIDAY"]:
                 time, client, location = "0", "", ""
             elif len(notes) == 1 and notes[0].strip() == "OFF":
                 time, client, location = "0", "", ""
