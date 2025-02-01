@@ -149,39 +149,51 @@ async def generate_report(request: ReportRequest):
                 if not entries:
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
-                        "project": "",
+                        "client": "",
                         "duration": "0",
                         "description": "",
                         "type": "empty"
                     })
-                elif entries[0][1] == "WEEKEND":
+                elif entries[0][1] in ["WEEKEND", "HOLIDAY"]:
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
-                        "project": "",
+                        "client": "",
                         "duration": "0",
-                        "description": "WEEKEND",
-                        "type": "weekend"
+                        "description": entries[0][1],
+                        "type": entries[0][1].lower()
                     })
                 else:
-                    # Vérifier si c'est un jour OFF complet ou une demi-journée
-                    all_off = all(note[1].strip() == "OFF" for note in entries)
-                    has_off = any(note[1].strip() == "OFF" for note in entries)
+                    # Grouper les entrées par client
+                    entries_by_client = {}
+                    for prefix, note in entries:
+                        client = prefix.strip("[]") if prefix else ""
+                        if client not in entries_by_client:
+                            entries_by_client[client] = []
+                        entries_by_client[client].append(note)
+
+                    # Calculer la durée totale et créer la description
+                    total_duration = 0
+                    descriptions = []
+                    clients = []
+                    separator = "\n\n― ― ― ― ― ― ― ― ― ―\n\n"
                     
-                    # Récupérer le client depuis les entrées
-                    project = next(
-                        (e[0].strip("[]") for e in entries if e[0]),
-                        ""
-                    )
-                    
+                    for client, client_entries in entries_by_client.items():
+                        # Vérifier si c'est un jour OFF pour ce client
+                        all_off = all(note.strip() == "OFF" for note in client_entries)
+                        has_off = any(note.strip() == "OFF" for note in client_entries)
+                        duration = 0 if all_off else 0.5 if has_off else 1
+                        total_duration += duration
+
+                        if duration > 0:
+                            clients.append(client)
+                            descriptions.append("\n\n".join(client_entries))
+
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
-                        "project": project,
-                        "duration": "0" if all_off else "0.5" if has_off else "1",
-                        "description": "\n\n".join(
-                            f"{prefix} {note}" if prefix else note 
-                            for prefix, note in entries
-                        ),
-                        "type": "off" if all_off else "half_off" if has_off else "work"
+                        "client": " + ".join(clients),
+                        "duration": str(total_duration),
+                        "description": separator.join(descriptions),
+                        "type": "work"
                     })
             return JSONResponse(content=formatted_data)
             

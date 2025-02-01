@@ -15,10 +15,39 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
   // Initialisation du calendrier des jours fériés français
   const hd = new Holidays('FR');
 
-  // Calcul des statistiques
-  const workDays = data.filter(d => d.type === 'work').length;
-  const halfDays = data.filter(d => d.type === 'half_off').length;
-  const offDays = data.filter(d => d.type === 'off').length;
+  // Calcul des statistiques par date
+  const statsByDate = data.reduce((acc: { [key: string]: { 
+    workDays: number,
+    halfDays: number,
+    offDays: number,
+    totalDuration: number
+  }}, curr) => {
+    if (!acc[curr.date]) {
+      acc[curr.date] = {
+        workDays: 0,
+        halfDays: 0,
+        offDays: 0,
+        totalDuration: 0
+      };
+    }
+
+    if (curr.type === 'work' && curr.duration !== '0') {
+      acc[curr.date].workDays += 1;
+      acc[curr.date].totalDuration += parseFloat(curr.duration);
+    } else if (curr.type === 'half_off') {
+      acc[curr.date].halfDays += 1;
+      acc[curr.date].totalDuration += parseFloat(curr.duration);
+    } else if (curr.type === 'off' || (curr.type === 'work' && curr.duration === '0')) {
+      acc[curr.date].offDays += 1;
+    }
+
+    return acc;
+  }, {});
+
+  // Calcul des totaux
+  const workDays = Object.values(statsByDate).reduce((acc, curr) => acc + curr.workDays, 0);
+  const halfDays = Object.values(statsByDate).reduce((acc, curr) => acc + curr.halfDays, 0);
+  const offDays = data.filter(d => d.type === 'off' || (d.type === 'work' && d.duration === '0')).length;
   const weekendDays = data.filter(d => d.type === 'weekend').length;
   const emptyDays = data.filter(d => d.type === 'empty').length;
 
@@ -31,9 +60,8 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
     return !isHoliday;
   }).length;
 
-  const totalWorkHours = data
-    .filter(d => d.type === 'work' || d.type === 'half_off')
-    .reduce((acc, curr) => acc + parseFloat(curr.duration), 0);
+  const totalWorkHours = Object.values(statsByDate)
+    .reduce((acc, curr) => acc + curr.totalDuration, 0);
 
   const totalRevenue = totalWorkHours * dailyRate;
 
@@ -47,9 +75,10 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
 
   // Données pour le graphique en barres (projets)
   const projectStats = data
-    .filter(d => d.type === 'work' || d.type === 'half_off')
+    .filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0')
     .reduce((acc: { [key: string]: number }, curr) => {
-      acc[curr.project] = (acc[curr.project] || 0) + parseFloat(curr.duration);
+      const projectName = curr.project || 'Sans projet';
+      acc[projectName] = (acc[projectName] || 0) + parseFloat(curr.duration);
       return acc;
     }, {});
 

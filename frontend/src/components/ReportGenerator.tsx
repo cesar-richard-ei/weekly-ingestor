@@ -25,10 +25,10 @@ import ReportStats from './ReportStats';
 
 export interface PreviewData {
   date: string;
-  project: string;
+  client: string;
   duration: string;
   description: string;
-  type: 'empty' | 'weekend' | 'off' | 'half_off' | 'work';
+  type: 'empty' | 'weekend' | 'holiday' | 'off' | 'half_off' | 'work';
 }
 
 export default function ReportGenerator() {
@@ -50,8 +50,7 @@ export default function ReportGenerator() {
     ? selectedClients.length > 0
       ? previewData.filter(row => {
           if (row.type === 'weekend' || row.type === 'empty') return true;
-          const client = row.project.replace(/^\[(.*?)\].*$/, '$1');
-          return selectedClients.includes(client);
+          return row.client.split(" + ").some(client => selectedClients.includes(client));
         })
       : previewData
     : null;
@@ -96,21 +95,27 @@ export default function ReportGenerator() {
   const getRowStyle = (type: PreviewData['type']) => {
     switch (type) {
       case 'weekend':
+      case 'holiday':
         return { 
           backgroundColor: 'rgba(0, 0, 0, 0.04)',
-          color: theme.palette.text.disabled
+          color: theme.palette.text.disabled,
+          fontStyle: 'normal' as const
         };
       case 'off':
         return { 
           backgroundColor: 'rgba(244, 67, 54, 0.08)',
-          color: theme.palette.text.disabled
+          color: theme.palette.text.disabled,
+          fontStyle: 'normal' as const
         };
       case 'half_off':
         return { 
-          backgroundColor: 'rgba(255, 152, 0, 0.08)'
+          backgroundColor: 'rgba(255, 152, 0, 0.08)',
+          fontStyle: 'normal' as const
         };
       default:
-        return undefined;
+        return {
+          fontStyle: 'normal' as const
+        };
     }
   };
 
@@ -140,9 +145,8 @@ export default function ReportGenerator() {
         link.remove();
       } else if (Array.isArray(response.data)) {
         const clients = Array.from(new Set(response.data
-          .filter(d => d.type === 'work' && d.project)
-          .map(d => d.project.replace(/^\[(.*?)\].*$/, '$1'))
-          .filter(Boolean)))
+          .filter(d => d.type === 'work' && d.client)
+          .map(d => d.client)))
           .sort();
         setAvailableClientsList(clients);
         setPreviewData(response.data);
@@ -255,7 +259,7 @@ export default function ReportGenerator() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Date</TableCell>
-                    <TableCell>Projet</TableCell>
+                    <TableCell>Clients</TableCell>
                     <TableCell align="right">Durée (j)</TableCell>
                     <TableCell>Description</TableCell>
                   </TableRow>
@@ -269,12 +273,22 @@ export default function ReportGenerator() {
                         sx={style}
                       >
                         <TableCell>{row.date}</TableCell>
-                        <TableCell>{row.project}</TableCell>
+                        <TableCell>
+                          {row.client ? row.client.split(" + ").map((client, i) => (
+                            <Chip
+                              key={i}
+                              label={client}
+                              size="small"
+                              sx={{ mr: 0.5, mb: 0.5 }}
+                            />
+                          )) : ''}
+                        </TableCell>
                         <TableCell align="right">{row.duration}</TableCell>
                         <TableCell 
                           sx={{ 
                             whiteSpace: 'pre-line',
-                            color: style?.color
+                            color: style?.color,
+                            fontStyle: style?.fontStyle
                           }}
                         >
                           {row.description}

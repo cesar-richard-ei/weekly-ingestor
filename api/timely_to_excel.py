@@ -95,7 +95,8 @@ class TimelyReport:
             else:
                 data_by_date[date] = []
 
-        # Ajouter les événements
+        # Grouper les événements par date et par client
+        events_by_date = {}
         for event in events:
             date = datetime.strptime(event["day"], "%Y-%m-%d")
             if not (self._is_weekend(date) or self._is_holiday(date)):
@@ -103,13 +104,30 @@ class TimelyReport:
                 project_name = project.get("name", "")
                 client_name = project.get("client", {}).get("name", "")
                 
+                if date not in events_by_date:
+                    events_by_date[date] = {}
+                
+                if client_name not in events_by_date[date]:
+                    events_by_date[date][client_name] = []
+                
                 # Pas de préfixe pour Management
                 if project_name == "Management":
-                    prefix = ""
+                    prefix = f"[{client_name}]"
+                    note = event.get("note", "")
                 else:
-                    prefix = f"[{client_name}]" if client_name else ""
+                    prefix = f"[{client_name}]"
+                    note = f"[{project_name}] {event.get('note', '')}"
                 
-                data_by_date[date].append((prefix, event.get("note", "")))
+                events_by_date[date][client_name].append((prefix, note))
+
+        # Convertir en format final
+        for date in self._get_dates_range(from_date, to_date):
+            if not (self._is_weekend(date) or self._is_holiday(date)):
+                if date in events_by_date:
+                    # Remplacer les entrées existantes par les entrées groupées par client
+                    data_by_date[date] = []
+                    for client_events in events_by_date[date].values():
+                        data_by_date[date].extend(client_events)
 
         return data_by_date
 
