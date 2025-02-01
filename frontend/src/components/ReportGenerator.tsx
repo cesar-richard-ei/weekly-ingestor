@@ -38,20 +38,53 @@ export default function ReportGenerator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData[] | null>(null);
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [hasPreview, setHasPreview] = useState(false);
+  const [availableClientsList, setAvailableClientsList] = useState<string[]>([]);
 
-  const availableProjects = previewData 
-    ? Array.from(new Set(previewData.map(d => d.project))).filter(Boolean)
+  const availableClients = hasPreview 
+    ? availableClientsList
     : [];
 
   const filteredPreviewData = previewData
-    ? selectedProjects.length > 0
-      ? previewData.map(row => ({
-          ...row,
-          type: selectedProjects.includes(row.project) || row.type !== 'work' ? row.type : 'off'
-        }))
+    ? selectedClients.length > 0
+      ? previewData.filter(row => {
+          if (row.type === 'weekend' || row.type === 'empty') return true;
+          const client = row.project.replace(/^\[(.*?)\].*$/, '$1');
+          return selectedClients.includes(client);
+        })
       : previewData
     : null;
+
+  const handleClientsChange = async (newValue: string[]) => {
+    setSelectedClients(newValue);
+    if (hasPreview && startDate && endDate) {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await axios.post(`${API_URL}/generate-report`, {
+          from_date: startDate.format('YYYY-MM-DD'),
+          to_date: endDate.format('YYYY-MM-DD'),
+          format: 'json',
+          client_filter: newValue
+        }, {
+          responseType: 'json'
+        });
+
+        if (Array.isArray(response.data)) {
+          setPreviewData(response.data);
+        } else {
+          setError('Format de données invalide');
+        }
+      } catch (err: any) {
+        setError(err.response?.data?.detail || 'Erreur lors de la génération du rapport');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   const calculateTotalDuration = (data: PreviewData[]) => {
     return data
@@ -86,14 +119,13 @@ export default function ReportGenerator() {
 
     setLoading(true);
     setError(null);
-    if (!download) setPreviewData(null);
 
     try {
       const response = await axios.post(`${API_URL}/generate-report`, {
         from_date: startDate.format('YYYY-MM-DD'),
         to_date: endDate.format('YYYY-MM-DD'),
         format: download ? 'excel' : 'json',
-        projects: selectedProjects.length > 0 ? selectedProjects : undefined
+        client_filter: selectedClients
       }, {
         responseType: download ? 'blob' : 'json'
       });
@@ -107,7 +139,14 @@ export default function ReportGenerator() {
         link.click();
         link.remove();
       } else if (Array.isArray(response.data)) {
+        const clients = Array.from(new Set(response.data
+          .filter(d => d.type === 'work' && d.project)
+          .map(d => d.project.replace(/^\[(.*?)\].*$/, '$1'))
+          .filter(Boolean)))
+          .sort();
+        setAvailableClientsList(clients);
         setPreviewData(response.data);
+        setHasPreview(true);
       } else {
         setError('Format de données invalide');
       }
@@ -129,60 +168,84 @@ export default function ReportGenerator() {
         <DatePicker
           label="Date de début"
           value={startDate}
-          onChange={setStartDate}
+          onChange={(newValue) => {
+            setStartDate(newValue);
+            setHasPreview(false);
+          }}
         />
         
         <DatePicker
           label="Date de fin"
           value={endDate}
-          onChange={setEndDate}
+          onChange={(newValue) => {
+            setEndDate(newValue);
+            setHasPreview(false);
+          }}
         />
 
         {error && (
           <Alert severity="error">{error}</Alert>
         )}
 
-        <Autocomplete
-          multiple
-          id="project-filter"
-          options={availableProjects}
-          value={selectedProjects}
-          onChange={(_, newValue) => setSelectedProjects(newValue)}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Filtrer par projets"
-              placeholder="Sélectionnez les projets à inclure"
-            />
-          )}
-          renderTags={(value, getTagProps) =>
-            value.map((option, index) => (
-              <Chip
-                label={option}
-                {...getTagProps({ index })}
-                color="primary"
-                variant="outlined"
-              />
-            ))
-          }
-        />
-
-        <Stack direction="row" spacing={2}>
+        {!hasPreview ? (
           <Button
             variant="contained"
-            onClick={() => generateReport(true)}
-            disabled={loading || !startDate || !endDate}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Télécharger le rapport'}
-          </Button>
-          <Button
-            variant="outlined"
             onClick={() => generateReport(false)}
             disabled={loading || !startDate || !endDate}
           >
             {loading ? <CircularProgress size={24} /> : 'Prévisualiser le rapport'}
           </Button>
-        </Stack>
+        ) : (
+          <>
+            <Autocomplete
+              multiple
+              id="client-filter"
+              options={availableClients}
+              value={selectedClients}
+              onChange={(_, newValue) => handleClientsChange(newValue)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Clients à inclure"
+                  placeholder="Sélectionnez les clients à inclure dans le rapport"
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    label={option}
+                    {...getTagProps({ index })}
+                    color="primary"
+                    variant="outlined"
+                  />
+                ))
+              }
+              loading={loading}
+              disabled={loading}
+            />
+
+            <Stack direction="row" spacing={2}>
+              <Button
+                variant="contained"
+                onClick={() => generateReport(true)}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Télécharger le rapport'}
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setHasPreview(false);
+                  setPreviewData(null);
+                  setSelectedClients([]);
+                  setAvailableClientsList([]);
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </Stack>
+          </>
+        )}
 
         {previewData && previewData.length > 0 && (
           <>

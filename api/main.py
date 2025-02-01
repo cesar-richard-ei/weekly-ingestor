@@ -119,6 +119,7 @@ class ReportRequest(BaseModel):
     from_date: str
     to_date: str
     format: str = "excel"  # "excel" ou "json"
+    client_filter: List[str] | None = None
 
 
 @app.post("/generate-report")
@@ -128,8 +129,16 @@ async def generate_report(request: ReportRequest):
         report = TimelyReport(TIMELY_ACCOUNT_ID, API_URL)
         # Récupérer tous les événements
         events = await report.get_events(request.from_date, request.to_date)
-        # Filtrer pour ne garder que les événements Pasqal
-        filtered_events = events  # report.filter_events_by_client(events, "Pasqal")
+        # Filtrer pour ne garder que les événements des clients spécifiés
+        filtered_events = (
+            [
+                e for e in events 
+                if (e.get("project", {}).get("client", {}).get("name", "") 
+                    in request.client_filter)
+            ]
+            if request.client_filter
+            else events
+        )
         # Traiter les événements filtrés
         data = report.process_events(filtered_events, request.from_date, request.to_date)
         
@@ -158,9 +167,15 @@ async def generate_report(request: ReportRequest):
                     all_off = all(note[1].strip() == "OFF" for note in entries)
                     has_off = any(note[1].strip() == "OFF" for note in entries)
                     
+                    # Récupérer le client depuis les entrées
+                    project = next(
+                        (e[0].strip("[]") for e in entries if e[0]),
+                        ""
+                    )
+                    
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
-                        "project": "Pasqal",
+                        "project": project,
                         "duration": "0" if all_off else "0.5" if has_off else "1",
                         "description": "\n\n".join(
                             f"{prefix} {note}" if prefix else note 

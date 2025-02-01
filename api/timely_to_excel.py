@@ -52,11 +52,14 @@ class TimelyReport:
 
             return all_events
 
-    def filter_events_by_client(self, events: List[Dict], client_name: str) -> List[Dict]:
+    def filter_events_by_client(
+        self, events: List[Dict], client_name: str
+    ) -> List[Dict]:
         """Filtre les événements pour ne garder que ceux du client spécifié"""
         return [
             event for event in events
-            if event.get("project", {}).get("client", {}).get("name", "") == client_name
+            if (event.get("project", {}).get("client", {}).get("name", "") 
+                == client_name)
         ]
 
     @staticmethod
@@ -96,15 +99,23 @@ class TimelyReport:
         for event in events:
             date = datetime.strptime(event["day"], "%Y-%m-%d")
             if not (self._is_weekend(date) or self._is_holiday(date)):
-                project = event.get("project", {}).get("name", "")
-                is_special = project in ["CI", "DevOps"]
-                prefix = f"[{project}]" if is_special else ""
+                project = event.get("project", {})
+                project_name = project.get("name", "")
+                client_name = project.get("client", {}).get("name", "")
+                
+                # Pas de préfixe pour Management
+                if project_name == "Management":
+                    prefix = ""
+                else:
+                    prefix = f"[{client_name}]" if client_name else ""
+                
                 data_by_date[date].append((prefix, event.get("note", "")))
 
         return data_by_date
 
     def generate_excel(
-        self, data_by_date: Dict[datetime, List[Tuple[str, str]]], output_path: str
+        self, data_by_date: Dict[datetime, List[Tuple[str, str]]], 
+        output_path: str
     ):
         """Génère le fichier Excel à partir des données traitées"""
         workbook = openpyxl.Workbook()
@@ -120,12 +131,14 @@ class TimelyReport:
     ):
         """Écrit une ligne dans le fichier Excel"""
         notes = []
+        project = ""
         for prefix, note in entries:
             if note in ["WEEKEND", "HOLIDAY"]:
                 notes = [note]
                 break
             note_lines = note.split("\n")
             if prefix:
+                project = prefix.strip("[]")
                 note_lines[0] = f"{prefix} {note_lines[0]}"
             notes.append("\n".join(note_lines))
 
@@ -140,9 +153,9 @@ class TimelyReport:
             elif len(notes) == 1 and notes[0].strip() == "OFF":
                 time, client, location = "0", "", ""
             elif any(note.strip() == "OFF" for note in notes):
-                time, client, location = "0.5", "Pasqal", "Remote"
+                time, client, location = "0.5", project, "Remote"
             else:
-                time, client, location = "1", "Pasqal", "Remote"
+                time, client, location = "1", project, "Remote"
         else:
             time, client, location = "0", "", ""
 
