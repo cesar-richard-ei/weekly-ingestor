@@ -1,4 +1,4 @@
-import { Paper, Grid, Typography, Box } from '@mui/material';
+import { Paper, Grid, Typography, Box, Alert } from '@mui/material';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PreviewData } from './ReportGenerator';
 
@@ -15,6 +15,10 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
   const halfDays = data.filter(d => d.type === 'half_off').length;
   const offDays = data.filter(d => d.type === 'off').length;
   const weekendDays = data.filter(d => d.type === 'weekend').length;
+  const emptyDays = data.filter(d => d.type === 'empty').length;
+
+  // Calcul des jours non saisis (hors weekends)
+  const nonFilledDays = data.filter(d => d.type === 'empty').length;
 
   const totalWorkHours = data
     .filter(d => d.type === 'work' || d.type === 'half_off')
@@ -44,6 +48,11 @@ export default function ReportStats({ data, dailyRate }: ReportStatsProps) {
 
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
+      {nonFilledDays > 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          {nonFilledDays} jour{nonFilledDays > 1 ? 's' : ''} non saisi{nonFilledDays > 1 ? 's' : ''} sur la période sélectionnée (hors weekends)
+        </Alert>
+      )}
       <Typography variant="h6" gutterBottom>
         Statistiques de la période
       </Typography>

@@ -129,7 +129,7 @@ async def generate_report(request: ReportRequest):
         # Récupérer tous les événements
         events = await report.get_events(request.from_date, request.to_date)
         # Filtrer pour ne garder que les événements Pasqal
-        filtered_events = report.filter_events_by_client(events, "Pasqal")
+        filtered_events = events  # report.filter_events_by_client(events, "Pasqal")
         # Traiter les événements filtrés
         data = report.process_events(filtered_events, request.from_date, request.to_date)
         

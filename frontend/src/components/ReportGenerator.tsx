@@ -12,7 +12,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  useTheme
+  useTheme,
+  Autocomplete,
+  Chip,
+  TextField
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
@@ -35,6 +38,20 @@ export default function ReportGenerator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData[] | null>(null);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+
+  const availableProjects = previewData 
+    ? Array.from(new Set(previewData.map(d => d.project))).filter(Boolean)
+    : [];
+
+  const filteredPreviewData = previewData
+    ? selectedProjects.length > 0
+      ? previewData.map(row => ({
+          ...row,
+          type: selectedProjects.includes(row.project) || row.type !== 'work' ? row.type : 'off'
+        }))
+      : previewData
+    : null;
 
   const calculateTotalDuration = (data: PreviewData[]) => {
     return data
@@ -75,7 +92,8 @@ export default function ReportGenerator() {
       const response = await axios.post(`${API_URL}/generate-report`, {
         from_date: startDate.format('YYYY-MM-DD'),
         to_date: endDate.format('YYYY-MM-DD'),
-        format: download ? 'excel' : 'json'
+        format: download ? 'excel' : 'json',
+        projects: selectedProjects.length > 0 ? selectedProjects : undefined
       }, {
         responseType: download ? 'blob' : 'json'
       });
@@ -124,6 +142,31 @@ export default function ReportGenerator() {
           <Alert severity="error">{error}</Alert>
         )}
 
+        <Autocomplete
+          multiple
+          id="project-filter"
+          options={availableProjects}
+          value={selectedProjects}
+          onChange={(_, newValue) => setSelectedProjects(newValue)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Filtrer par projets"
+              placeholder="Sélectionnez les projets à inclure"
+            />
+          )}
+          renderTags={(value, getTagProps) =>
+            value.map((option, index) => (
+              <Chip
+                label={option}
+                {...getTagProps({ index })}
+                color="primary"
+                variant="outlined"
+              />
+            ))
+          }
+        />
+
         <Stack direction="row" spacing={2}>
           <Button
             variant="contained"
@@ -143,7 +186,7 @@ export default function ReportGenerator() {
 
         {previewData && previewData.length > 0 && (
           <>
-            <ReportStats data={previewData} dailyRate={323} />
+            <ReportStats data={filteredPreviewData || []} dailyRate={323} />
             <TableContainer component={Paper} sx={{ maxHeight: 440 }}>
               <Table stickyHeader>
                 <TableHead>
@@ -155,7 +198,7 @@ export default function ReportGenerator() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {previewData.map((row: PreviewData, index: number) => {
+                  {filteredPreviewData?.map((row: PreviewData, index: number) => {
                     const style = getRowStyle(row.type);
                     return (
                       <TableRow 
@@ -181,7 +224,7 @@ export default function ReportGenerator() {
                     fontWeight: 'bold'
                   }}>
                     <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(previewData)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(filteredPreviewData || [])}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableBody>
