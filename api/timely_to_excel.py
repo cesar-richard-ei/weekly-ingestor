@@ -9,7 +9,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 import openpyxl
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 import holidays
 
 # Configuration
@@ -124,7 +124,6 @@ class TimelyReport:
         for date in self._get_dates_range(from_date, to_date):
             if not (self._is_weekend(date) or self._is_holiday(date)):
                 if date in events_by_date:
-                    # Remplacer les entrées existantes par les entrées groupées par client
                     data_by_date[date] = []
                     for client_events in events_by_date[date].values():
                         data_by_date[date].extend(client_events)
@@ -138,49 +137,69 @@ class TimelyReport:
         """Génère le fichier Excel à partir des données traitées"""
         workbook = openpyxl.Workbook()
         sheet = workbook.active
+        row_index = 1
 
-        for index, (date, entries) in enumerate(sorted(data_by_date.items()), 1):
-            self._write_row(sheet, index, date, entries)
+        for date, entries in sorted(data_by_date.items()):
+            if not entries:
+                self._write_row(sheet, row_index, date, [], "")
+                row_index += 1
+            elif isinstance(entries[0], tuple):
+                # Grouper les entrées par client
+                entries_by_client = {}
+                for prefix, note in entries:
+                    client = prefix.strip("[]") if prefix else ""
+                    if client not in entries_by_client:
+                        entries_by_client[client] = []
+                    entries_by_client[client].append(note)
+
+                # Écrire une ligne par client
+                for client, client_entries in sorted(entries_by_client.items()):
+                    # Vérifier si c'est un jour OFF pour ce client
+                    all_off = all(note.strip() == "OFF" for note in client_entries)
+                    has_off = any(note.strip() == "OFF" for note in client_entries)
+                    
+                    self._write_row(
+                        sheet, row_index, date, client_entries, client, 
+                        all_off=all_off, has_off=has_off
+                    )
+                    row_index += 1
+            else:
+                # C'est un weekend ou un jour férié
+                self._write_row(sheet, row_index, date, [entries[0][1]], "")
+                row_index += 1
 
         workbook.save(output_path)
 
     def _write_row(
-        self, sheet, row: int, date: datetime, entries: List[Tuple[str, str]]
+        self, sheet, row: int, date: datetime, entries: List[Union[str, Tuple[str, str]]], 
+        client: str, all_off: bool = False, has_off: bool = False
     ):
         """Écrit une ligne dans le fichier Excel"""
-        notes = []
-        project = ""
-        for prefix, note in entries:
-            if note in ["WEEKEND", "HOLIDAY"]:
-                notes = [note]
-                break
-            note_lines = note.split("\n")
-            if prefix:
-                project = prefix.strip("[]")
-                note_lines[0] = f"{prefix} {note_lines[0]}"
-            notes.append("\n".join(note_lines))
-
-        cell_value = "\n\n".join(notes)
-
         # Remplir les cellules
         sheet.cell(row=row, column=1, value=date.strftime("%d/%m/%Y"))
 
-        if notes:
-            if notes[0] in ["WEEKEND", "HOLIDAY"]:
-                time, client, location = "0", "", ""
-            elif len(notes) == 1 and notes[0].strip() == "OFF":
-                time, client, location = "0", "", ""
-            elif any(note.strip() == "OFF" for note in notes):
-                time, client, location = "0.5", project, "Remote"
-            else:
-                time, client, location = "1", project, "Remote"
+        if not entries:
+            time, location = "0", ""
+        elif isinstance(entries[0], str) and entries[0] in ["WEEKEND", "HOLIDAY"]:
+            time, location = "0", ""
         else:
-            time, client, location = "0", "", ""
+            time = "0" if all_off else "0.5" if has_off else "1"
+            location = "Remote" if time != "0" else ""
 
         sheet.cell(row=row, column=2, value=time)
         sheet.cell(row=row, column=3, value=client)
         sheet.cell(row=row, column=4, value=location)
-        sheet.cell(row=row, column=5, value=cell_value)
+        
+        # Traiter les notes en fonction de leur type
+        notes = []
+        for entry in entries:
+            if isinstance(entry, tuple):
+                _, note = entry
+                notes.append(note)
+            else:
+                notes.append(entry)
+                
+        sheet.cell(row=row, column=5, value="\n\n".join(notes))
 
 
 async def main():
