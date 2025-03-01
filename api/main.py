@@ -74,6 +74,25 @@ class TimelyClient:
                     detail="Échec de l'authentification Timely",
                 )
 
+    async def get_clients(self, account_id: str) -> List[Dict]:
+        """Récupère la liste des clients depuis l'API Timely"""
+        await self.ensure_auth()
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{TIMELY_BASE_URL}/{account_id}/clients",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+            )
+
+            if response.status_code == 200:
+                clients = response.json()
+                return [client for client in clients if client.get("external_id") is None]
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Échec de la récupération des clients: {response.text}",
+                )
+                
     async def get_events(
         self, account_id: str, since: str, upto: str, page: int = 1
     ) -> List[Dict]:
@@ -96,8 +115,18 @@ class TimelyClient:
                 )
 
 
-# Instance globale du client
+# Initialisation du client Timely
 timely_client = TimelyClient()
+
+
+@app.get("/clients")
+async def list_clients() -> List[Dict[str, Any]]:
+    """Récupère la liste des clients disponibles dans Timely"""
+    try:
+        clients = await timely_client.get_clients(TIMELY_ACCOUNT_ID)
+        return clients
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/{account_id}/events")
@@ -112,7 +141,11 @@ async def list_events(
     - upto: Date de fin (YYYY-MM-DD)
     - page: Numéro de page (défaut: 1)
     """
-    return await timely_client.get_events(account_id, since, upto, page)
+    try:
+        events = await timely_client.get_events(account_id, since, upto, page)
+        return events
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class ReportRequest(BaseModel):
