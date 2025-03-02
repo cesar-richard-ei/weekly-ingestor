@@ -1,13 +1,14 @@
 FROM node:lts-slim AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+RUN corepack enable && corepack prepare yarn@4.6.0 --activate
+COPY package.json .yarn yarn.lock ./
+RUN yarn install --immutable
 
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 
 COPY . .
-RUN npm run build
+RUN yarn build
 
 FROM nginx:alpine-slim AS production
 COPY --from=builder /app/dist /usr/share/nginx/html
