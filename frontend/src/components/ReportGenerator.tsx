@@ -431,25 +431,11 @@ export default function ReportGenerator() {
                     <TableCell>Clients</TableCell>
                     <TableCell align="right">Durée (j)</TableCell>
                     <TableCell>Description</TableCell>
-                    <TableCell align="right">TJM</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredPreviewData?.map((row: PreviewData, index: number) => {
                     const style = getRowStyle(row.type);
-                    // Récupérer le TJM pour chaque client s'il est défini
-                    const clientTJMs = row.client 
-                      ? row.client.split(" + ").map(client => ({
-                          name: client.trim(),
-                          rate: getClientRate(client.trim())
-                        }))
-                      : [];
-                    
-                    // Calculer le TJM moyen pour cette ligne
-                    const avgRate = clientTJMs.length > 0
-                      ? clientTJMs.reduce((sum, c) => sum + c.rate, 0) / clientTJMs.length
-                      : 0;
-                    
                     return (
                       <TableRow 
                         key={index}
@@ -476,11 +462,6 @@ export default function ReportGenerator() {
                         >
                           {row.description}
                         </TableCell>
-                        <TableCell align="right">
-                          {row.type === 'work' || row.type === 'half_off' ? 
-                            `${avgRate.toFixed(0)} €` : 
-                            ''}
-                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -490,7 +471,6 @@ export default function ReportGenerator() {
                   }}>
                     <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(filteredPreviewData || [])}</TableCell>
-                    <TableCell />
                     <TableCell />
                   </TableRow>
                 </TableBody>

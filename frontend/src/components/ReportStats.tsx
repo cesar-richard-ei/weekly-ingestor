@@ -256,6 +256,32 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
   else if (diversificationIndex > 0.4) diversificationText = "Moyenne";
   else if (diversificationIndex > 0.2) diversificationText = "Bonne";
   
+  // Calcul des revenus par jour pour identifier les jours les plus prolifiques
+  const revenueByDay: { [key: string]: number } = {};
+  
+  data.forEach(item => {
+    if ((item.type === 'work' || item.type === 'half_off') && item.client && item.duration !== '0') {
+      if (!revenueByDay[item.date]) {
+        revenueByDay[item.date] = 0;
+      }
+      
+      const clients = item.client.split(" + ");
+      const duration = parseFloat(item.duration) / clients.length;
+      
+      clients.forEach(client => {
+        const clientName = client.trim();
+        const rate = getClientRate(clientName);
+        revenueByDay[item.date] += duration * rate;
+      });
+    }
+  });
+  
+  // Transformer en tableau pour affichage
+  const topRevenueDays = Object.entries(revenueByDay)
+    .map(([date, revenue]) => ({ date, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+  
   // 3. Visualisations avancées
   // Données pour le graphique en radar de répartition client / temps
   const radarData = clientBarData.slice(0, 5).map(client => {
@@ -643,6 +669,52 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                         ))}
                       </Box>
                     </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+            
+            {/* Section des jours les plus prolifiques */}
+            <Grid item xs={12} md={6}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Jours les plus prolifiques
+                  </Typography>
+                  
+                  {topRevenueDays.length > 0 ? (
+                    <>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        Top 5 des jours générant le plus de revenus
+                      </Typography>
+                      
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={topRevenueDays}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip formatter={(value) => [`${Number(value).toFixed(0)} €`, "Revenus"]} />
+                          <Bar dataKey="revenue" fill={theme.palette.success.main} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      
+                      <Box sx={{ mt: 2 }}>
+                        {topRevenueDays.map((day, index) => (
+                          <Box key={day.date} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                            <Typography variant="body2">
+                              {index + 1}. {day.date}
+                            </Typography>
+                            <Typography variant="body2" fontWeight="bold">
+                              {day.revenue.toFixed(0)} €
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </>
+                  ) : (
+                    <Alert severity="info">
+                      Aucune donnée de revenus disponible pour cette période
+                    </Alert>
                   )}
                 </CardContent>
               </Card>
