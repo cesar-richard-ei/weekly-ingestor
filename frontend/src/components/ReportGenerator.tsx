@@ -21,13 +21,16 @@ import {
   FormLabel,
   Box,
   Card,
-  CardContent
+  CardContent,
+  Divider
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
 import axios from 'axios';
 import { API_URL } from '../config';
 import ReportStats from './ReportStats';
+import { useClientRates } from '../hooks/useClientRates';
+import ClientRatesEditor from './ClientRatesEditor';
 
 export interface PreviewData {
   date: string;
@@ -49,6 +52,8 @@ export default function ReportGenerator() {
   const [hasPreview, setHasPreview] = useState(false);
   const [availableClientsList, setAvailableClientsList] = useState<string[]>([]);
   const [uniqueClients, setUniqueClients] = useState<string[]>([]);
+  const { getClientRate, clientRates } = useClientRates();
+  const [statsKey, setStatsKey] = useState(0); // Compteur pour forcer le re-rendu
 
   // Charger la liste des clients au chargement du composant
   useEffect(() => {
@@ -93,6 +98,12 @@ export default function ReportGenerator() {
     return Array.from(clientSet).sort();
   };
 
+  // Force la mise à jour des statistiques quand les TJM changent
+  const handleRatesChanged = () => {
+    // Incrémenter la clé pour forcer un re-rendu complet
+    setStatsKey(prev => prev + 1);
+  };
+
   // Mise à jour du filteredPreviewData pour s'assurer que la logique de filtrage reste cohérente
   const filteredPreviewData = previewData
     ? selectedClients.length > 0
@@ -118,14 +129,20 @@ export default function ReportGenerator() {
       // Sinon on l'ajoute
       return [...prev, client];
     });
+    // Forcer la mise à jour des statistiques
+    setStatsKey(prev => prev + 1);
   };
 
   const selectAllClients = () => {
     setSelectedClients([...uniqueClients]);
+    // Forcer la mise à jour des statistiques
+    setStatsKey(prev => prev + 1);
   };
 
   const unselectAllClients = () => {
     setSelectedClients([]);
+    // Forcer la mise à jour des statistiques
+    setStatsKey(prev => prev + 1);
   };
 
   const calculateTotalDuration = (data: PreviewData[]) => {
@@ -224,23 +241,94 @@ export default function ReportGenerator() {
       </Typography>
       
       <Stack spacing={3} sx={{ mt: 3 }}>
-        <DatePicker
-          label="Date de début"
-          value={startDate}
-          onChange={(newValue) => {
-            setStartDate(newValue);
-            setHasPreview(false);
-          }}
-        />
-        
-        <DatePicker
-          label="Date de fin"
-          value={endDate}
-          onChange={(newValue) => {
-            setEndDate(newValue);
-            setHasPreview(false);
-          }}
-        />
+        {/* Dates et shortcuts */}
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="subtitle1" gutterBottom>
+              Période du rapport
+            </Typography>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Sélectionnez une période ou utilisez les raccourcis ci-dessous
+              </Typography>
+            </Box>
+            
+            <Stack spacing={2}>
+              <DatePicker
+                label="Date de début"
+                value={startDate}
+                onChange={(newValue) => {
+                  setStartDate(newValue);
+                  setHasPreview(false);
+                }}
+              />
+              
+              <DatePicker
+                label="Date de fin"
+                value={endDate}
+                onChange={(newValue) => {
+                  setEndDate(newValue);
+                  setHasPreview(false);
+                }}
+              />
+              
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => {
+                    const now = dayjs();
+                    setStartDate(now.startOf('month'));
+                    setEndDate(now.endOf('month'));
+                    setHasPreview(false);
+                  }}
+                >
+                  Ce mois-ci
+                </Button>
+                
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => {
+                    const lastMonth = dayjs().subtract(1, 'month');
+                    setStartDate(lastMonth.startOf('month'));
+                    setEndDate(lastMonth.endOf('month'));
+                    setHasPreview(false);
+                  }}
+                >
+                  Mois précédent
+                </Button>
+                
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => {
+                    const now = dayjs();
+                    setStartDate(now.startOf('year'));
+                    setEndDate(now.endOf('year'));
+                    setHasPreview(false);
+                  }}
+                >
+                  Cette année
+                </Button>
+                
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => {
+                    const lastYear = dayjs().subtract(1, 'year');
+                    setStartDate(lastYear.startOf('year'));
+                    setEndDate(lastYear.endOf('year'));
+                    setHasPreview(false);
+                  }}
+                >
+                  Année dernière
+                </Button>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
 
         <Card variant="outlined">
           <CardContent>
@@ -271,22 +359,34 @@ export default function ReportGenerator() {
                   <CircularProgress size={24} />
                 </Box>
               ) : uniqueClients.length > 0 ? (
-                <FormGroup row>
-                  {uniqueClients.map((client) => (
-                    <FormControlLabel
-                      key={client}
-                      control={
-                        <Checkbox
-                          checked={selectedClients.includes(client)}
-                          onChange={() => handleClientToggle(client)}
-                          name={client}
-                        />
-                      }
-                      label={client}
-                      sx={{ width: 'auto', minWidth: '200px' }}
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Sélectionnez les clients à inclure dans votre rapport
+                    </Typography>
+                    <ClientRatesEditor 
+                      availableClients={uniqueClients} 
+                      onRatesChanged={handleRatesChanged}
                     />
-                  ))}
-                </FormGroup>
+                  </Box>
+                  <Divider sx={{ my: 1 }} />
+                  <FormGroup row>
+                    {uniqueClients.map((client) => (
+                      <FormControlLabel
+                        key={client}
+                        control={
+                          <Checkbox
+                            checked={selectedClients.includes(client)}
+                            onChange={() => handleClientToggle(client)}
+                            name={client}
+                          />
+                        }
+                        label={client}
+                        sx={{ width: 'auto', minWidth: '200px' }}
+                      />
+                    ))}
+                  </FormGroup>
+                </>
               ) : (
                 <Alert severity="info">
                   Aucun client disponible. Vérifiez la connexion avec l'API Timely.
@@ -333,7 +433,11 @@ export default function ReportGenerator() {
 
         {previewData && previewData.length > 0 && (
           <>
-            <ReportStats data={filteredPreviewData || []} dailyRate={323} />
+            <ReportStats 
+              key={statsKey} // Utiliser la clé pour forcer le re-rendu
+              data={filteredPreviewData || []} 
+              getClientRate={getClientRate} 
+            />
             <TableContainer component={Paper} sx={{ maxHeight: 440 }}>
               <Table stickyHeader>
                 <TableHead>
@@ -342,11 +446,25 @@ export default function ReportGenerator() {
                     <TableCell>Clients</TableCell>
                     <TableCell align="right">Durée (j)</TableCell>
                     <TableCell>Description</TableCell>
+                    <TableCell align="right">TJM</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredPreviewData?.map((row: PreviewData, index: number) => {
                     const style = getRowStyle(row.type);
+                    // Récupérer le TJM pour chaque client s'il est défini
+                    const clientTJMs = row.client 
+                      ? row.client.split(" + ").map(client => ({
+                          name: client.trim(),
+                          rate: getClientRate(client.trim())
+                        }))
+                      : [];
+                    
+                    // Calculer le TJM moyen pour cette ligne
+                    const avgRate = clientTJMs.length > 0
+                      ? clientTJMs.reduce((sum, c) => sum + c.rate, 0) / clientTJMs.length
+                      : 0;
+                    
                     return (
                       <TableRow 
                         key={index}
@@ -373,6 +491,11 @@ export default function ReportGenerator() {
                         >
                           {row.description}
                         </TableCell>
+                        <TableCell align="right">
+                          {row.type === 'work' || row.type === 'half_off' ? 
+                            `${avgRate.toFixed(0)} €` : 
+                            ''}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -382,6 +505,7 @@ export default function ReportGenerator() {
                   }}>
                     <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(filteredPreviewData || [])}</TableCell>
+                    <TableCell />
                     <TableCell />
                   </TableRow>
                 </TableBody>

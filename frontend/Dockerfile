@@ -16,10 +16,11 @@ CMD ["nginx", "-g", "daemon off;"]
 
 FROM node:lts-slim AS development
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+RUN corepack enable && corepack prepare yarn@4.6.0 --activate
+COPY package.json .yarn yarn.lock ./
+RUN yarn install --immutable
 COPY . .
 EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["yarn", "run", "dev", "--", "--host", "0.0.0.0"]
 
 FROM production AS final 
