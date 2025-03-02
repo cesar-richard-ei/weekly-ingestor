@@ -1,8 +1,8 @@
 import { Paper, Grid, Typography, Box, Alert, Divider, useTheme, Card, CardContent, Chip, LinearProgress, Tooltip as MuiTooltip } from '@mui/material';
-import { PieChart, Pie, Cell, Legend, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter } from 'recharts';
+import { PieChart, Pie, Cell, Legend, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { PreviewData } from './ReportGenerator';
 import Holidays from 'date-holidays';
-import { parse, isWeekend, format, getDay, addDays, isSameMonth, differenceInCalendarDays, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { parse, isWeekend, format, getDay, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 // Palette de couleurs adaptée aux graphiques
@@ -250,23 +250,11 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
     }, 0);
   }
   
-  // Niveau de diversification (0-1, où 1 = concentration totale sur un seul client)
-  const diversificationLevel = diversificationIndex.toFixed(2);
-  // Classification textuelle
-  let diversificationText = "Excellente";
-  if (diversificationIndex > 0.8) diversificationText = "Très faible";
-  else if (diversificationIndex > 0.6) diversificationText = "Faible";
+  // Interprétation de l'indice de diversification
+  let diversificationText = "";
+  if (diversificationIndex >= 0.6) diversificationText = "Faible";
   else if (diversificationIndex > 0.4) diversificationText = "Moyenne";
   else if (diversificationIndex > 0.2) diversificationText = "Bonne";
-  
-  // Données pour le radar chart (comparer différentes dimensions)
-  const clientDimensionsData = topClients.map(client => {
-    return {
-      name: client.name,
-      value: client.value,
-      fullname: client.name.length > 8 ? client.name : null
-    };
-  });
   
   // 3. Visualisations avancées
   // Données pour le graphique en radar de répartition client / temps
@@ -277,51 +265,26 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
   });
   
   // 4. Métriques financières
-  // Projection annuelle (basée sur la moyenne journalière)
-  let annualProjection = 0;
-  let averageDailyRevenue = 0;
-  const daysWithActivity = data.filter(d => (d.type === 'work' || d.type === 'half_off') && parseFloat(d.duration) > 0).length;
+  // Moyenne du revenu quotidien
+  let avgDailyRevenue = totalRevenue / workableDays;
   
-  if (daysWithActivity > 0) {
-    averageDailyRevenue = totalRevenue / daysWithActivity;
-    // Estimation basée sur 220 jours ouvrables par an
-    annualProjection = averageDailyRevenue * 220;
-  }
-  
-  // 5. Productivité et planification
-  // Taux de fragmentation (nombre moyen de clients par jour)
-  const daysWithClients = new Map<string, Set<string>>();
+  // Récupération des jours avec clients et nombre moyen de clients par jour
+  const daysWithClients = new Set<string>();
+  let totalClients = 0;
+  let avgClientsPerDay = 0;
   
   data.forEach(item => {
-    if ((item.type === 'work' || item.type === 'half_off') && item.client) {
-      const clients = item.client.split(" + ").map(c => c.trim());
-      if (!daysWithClients.has(item.date)) {
-        daysWithClients.set(item.date, new Set<string>());
-      }
-      clients.forEach(client => {
-        daysWithClients.get(item.date)?.add(client);
-      });
+    if (item.type === 'work' && item.client) {
+      daysWithClients.add(item.date);
+      const clientCount = item.client.split(" + ").length;
+      totalClients += clientCount;
     }
   });
   
-  let avgClientsPerDay = 0;
-  let maxClientsPerDay = 0;
-  
   if (daysWithClients.size > 0) {
-    let totalClients = 0;
-    daysWithClients.forEach(clients => {
-      totalClients += clients.size;
-      maxClientsPerDay = Math.max(maxClientsPerDay, clients.size);
-    });
     avgClientsPerDay = totalClients / daysWithClients.size;
   }
   
-  // Calcul des données pour le camembert des revenus par client
-  const clientRevenueData = clientBarData.map(client => ({
-    name: client.name,
-    value: client.revenue
-  }));
-
   // Ajouter un visuel pour les TJM par client dans la section Analyse des clients
   const clientRatesData = clientBarData.slice(0, 5).map(client => {
     const rate = getClientRate(client.name);
@@ -604,7 +567,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                       <Typography variant="body2">
-                        Indice de concentration: {diversificationLevel}
+                        Indice de concentration: {diversificationIndex.toFixed(2)}
                       </Typography>
                       <MuiTooltip title="Mesure la répartition de votre activité entre différents clients. Plus l'indice est bas, plus votre activité est diversifiée.">
                         <Box component="span" sx={{ ml: 1, cursor: 'help', color: 'text.secondary', fontSize: '0.8rem' }}>
@@ -621,37 +584,42 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                         label={diversificationText} 
                         size="small" 
                         color={
-                          diversificationText === "Excellente" || diversificationText === "Bonne" 
-                            ? "success" 
-                            : diversificationText === "Moyenne" 
-                              ? "warning" 
-                              : "error"
+                          diversificationText === "Faible" ? "success" :
+                          diversificationText === "Moyenne" ? "warning" :
+                          "error"
                         }
                       />
                     </Box>
                   </Box>
                   
-                  {radarData.length >= 3 && (
+                  {radarData.length > 0 && (
                     <>
                       <Divider sx={{ my: 2 }} />
                       
                       <Typography variant="body2" sx={{ mb: 1 }}>
-                        Visualisation radar
+                        Visualisation répartition du volume de travail
                       </Typography>
                       
                       <ResponsiveContainer width="100%" height={200}>
-                        <RadarChart outerRadius={90} data={radarData}>
+                        <RadarChart 
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          width={500}
+                          height={300}
+                          data={radarData}
+                        >
                           <PolarGrid />
                           <PolarAngleAxis dataKey="name" />
                           <PolarRadiusAxis />
-                          <Radar 
-                            name="Jours" 
-                            dataKey="value" 
-                            stroke={theme.palette.primary.main} 
-                            fill={theme.palette.primary.main} 
+                          <Radar
+                            name="Répartition du volume de travail"
+                            dataKey="value"
+                            stroke="#8884d8"
+                            fill="#8884d8"
                             fillOpacity={0.6}
                           />
-                          <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
+                          <Tooltip />
                         </RadarChart>
                       </ResponsiveContainer>
                     </>
@@ -693,22 +661,10 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                       
                       <Box sx={{ mb: 1 }}>
                         <Typography variant="body2" gutterBottom>
-                          Projection annuelle (basée sur votre activité)
+                          Moyenne du revenu quotidien
                         </Typography>
                         <Typography variant="h5" color="success.main">
-                          {annualProjection.toLocaleString()} €
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Estimation sur 220 jours ouvrables
-                        </Typography>
-                      </Box>
-                      
-                      <Box sx={{ mb: 1 }}>
-                        <Typography variant="body2" gutterBottom>
-                          Revenu moyen par jour facturé
-                        </Typography>
-                        <Typography variant="h6" color="primary.main">
-                          {averageDailyRevenue.toLocaleString()} €
+                          {avgDailyRevenue.toLocaleString()} €
                         </Typography>
                       </Box>
                     </Grid>
@@ -733,24 +689,6 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                             {avgClientsPerDay.toFixed(1)} clients/jour
                           </Typography>
                         </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2">Maximum de clients par jour</Typography>
-                          <Typography variant="body2" fontWeight="bold">
-                            {maxClientsPerDay}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      
-                      <Box sx={{ mb: 1 }}>
-                        <Typography variant="body2" gutterBottom>
-                          Taux d'activité sur la période
-                        </Typography>
-                        <Typography variant="h6" color="info.main">
-                          {(daysWithActivity / workableDays * 100).toFixed(0)}%
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {daysWithActivity} jours avec activité sur {workableDays} jours ouvrables
-                        </Typography>
                       </Box>
                     </Grid>
                   </Grid>

@@ -14,7 +14,6 @@ import {
   TableRow,
   useTheme,
   Chip,
-  TextField,
   FormGroup,
   FormControlLabel,
   Checkbox,
@@ -50,9 +49,8 @@ export default function ReportGenerator() {
   const [previewData, setPreviewData] = useState<PreviewData[] | null>(null);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [hasPreview, setHasPreview] = useState(false);
-  const [availableClientsList, setAvailableClientsList] = useState<string[]>([]);
   const [uniqueClients, setUniqueClients] = useState<string[]>([]);
-  const { getClientRate, clientRates } = useClientRates();
+  const { getClientRate } = useClientRates();
   const [statsKey, setStatsKey] = useState(0); // Compteur pour forcer le re-rendu
 
   // Charger la liste des clients au chargement du composant
@@ -79,10 +77,6 @@ export default function ReportGenerator() {
       setLoadingClients(false);
     }
   };
-
-  const availableClients = hasPreview 
-    ? availableClientsList
-    : [];
 
   // Cette fonction recalcule les clients uniques à partir des données de prévisualisation
   const extractUniqueClients = (data: PreviewData[]) => {
@@ -204,13 +198,6 @@ export default function ReportGenerator() {
         link.click();
         link.remove();
       } else if (Array.isArray(response.data)) {
-        // Récupérer la liste complète des clients (combinés) pour la compatibilité
-        const combinedClients = Array.from(new Set(response.data
-          .filter(d => d.type === 'work' && d.client)
-          .map(d => d.client)))
-          .sort();
-        
-        setAvailableClientsList(combinedClients);
         setPreviewData(response.data);
         
         // Si on n'a pas encore de clients chargés depuis l'API, extrayons-les des données
@@ -422,8 +409,6 @@ export default function ReportGenerator() {
               onClick={() => {
                 setHasPreview(false);
                 setPreviewData(null);
-                // Ne pas réinitialiser la liste des clients ni la sélection
-                setAvailableClientsList([]);
               }}
             >
               Réinitialiser

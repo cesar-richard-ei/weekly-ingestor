@@ -21,7 +21,7 @@ import {
   Alert
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { ClientRate, useClientRates } from '../hooks/useClientRates';
+import { useClientRates } from '../hooks/useClientRates';
 
 interface ClientRatesEditorProps {
   availableClients?: string[];
