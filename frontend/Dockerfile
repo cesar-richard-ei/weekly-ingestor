@@ -10,11 +10,12 @@ RUN corepack enable && \
     corepack prepare yarn@4.6.0 --activate && \
     yarn install
 
-COPY . .
-RUN yarn build
-
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
+
+COPY . .
+
+RUN yarn build
 
 FROM nginx:alpine-slim AS production
 COPY --from=builder /app/dist /usr/share/nginx/html
