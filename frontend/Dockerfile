@@ -1,7 +1,10 @@
 FROM node:lts-slim AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare yarn@4.6.0 --activate
-COPY package.json .yarn yarn.lock ./
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
+
+# Installation des dépendances sans utiliser PnP
 RUN yarn install --immutable
 
 ARG VITE_API_URL
@@ -18,7 +21,8 @@ CMD ["nginx", "-g", "daemon off;"]
 FROM node:lts-slim AS development
 WORKDIR /app
 RUN corepack enable && corepack prepare yarn@4.6.0 --activate
-COPY package.json .yarn yarn.lock ./
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
 RUN yarn install --immutable
 COPY . .
 EXPOSE 5173
