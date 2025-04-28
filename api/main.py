@@ -224,7 +224,7 @@ async def generate_report(request: ReportRequest):
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
                         "client": " + ".join(clients),
-                        "duration": f"{total_duration:.1f}".replace(".", ","),
+                        "duration": str(total_duration),
                         "description": separator.join(descriptions),
                         "type": "work"
                     })

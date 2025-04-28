@@ -142,7 +142,7 @@ export default function ReportGenerator() {
   const calculateTotalDuration = (data: PreviewData[]) => {
     return data
       .filter(row => row.type === 'work' || row.type === 'half_off')
-      .reduce((acc, row) => acc + parseFloat(row.duration.replace(",", ".")), 0)
+      .reduce((acc, row) => acc + parseFloat(row.duration), 0)
       .toFixed(2);
   };
 
@@ -151,7 +151,7 @@ export default function ReportGenerator() {
       case 'weekend':
       case 'holiday':
         return { 
-          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+          backgroundColor: 'rgba(0, 0.15, 0.1, 0.04)',
           color: theme.palette.text.disabled,
           fontStyle: 'normal' as const
         };
