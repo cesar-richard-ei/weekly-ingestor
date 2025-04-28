@@ -102,7 +102,7 @@ export default function ReportGenerator() {
   const filteredPreviewData = previewData
     ? selectedClients.length > 0
       ? previewData.filter(row => {
-          if (row.type === 'weekend' || row.type === 'empty') return true;
+          if (row.type === 'weekend' || row.type === 'empty' || row.type === 'holiday') return true;
           
           // Si c'est un jour de travail, vérifier si au moins un des clients est sélectionné
           if (row.client) {
