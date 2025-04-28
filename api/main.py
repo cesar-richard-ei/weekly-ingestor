@@ -174,7 +174,7 @@ async def generate_report(request: ReportRequest):
         )
         # Traiter les événements filtrés
         data = report.process_events(filtered_events, request.from_date, request.to_date)
-        
+
         if request.format == "json":
             # Transformer les données au format attendu par le frontend
             formatted_data = []
@@ -209,7 +209,7 @@ async def generate_report(request: ReportRequest):
                     descriptions = []
                     clients = []
                     separator = "\n\n― ― ― ― ― ― ― ― ― ―\n\n"
-                    
+
                     for client, client_entries in entries_by_client.items():
                         # Vérifier si c'est un jour OFF pour ce client
                         all_off = all(note.strip() == "OFF" for note in client_entries)
@@ -224,17 +224,16 @@ async def generate_report(request: ReportRequest):
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
                         "client": " + ".join(clients),
-                        "duration": str(total_duration),
+                        "duration": f"{total_duration:.1f}".replace(".", ","),
                         "description": separator.join(descriptions),
                         "type": "work"
                     })
             return JSONResponse(content=formatted_data)
-            
-        # Générer le fichier Excel en mémoire
+
         output = BytesIO()
         report.generate_excel(data, output)
         output.seek(0)
-        
+
         return StreamingResponse(
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
