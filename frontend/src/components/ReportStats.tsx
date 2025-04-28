@@ -338,7 +338,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           <Grid item xs={12} md={6} lg={3}>
             <Box sx={{ textAlign: 'center', mb: 2 }}>
               <Typography variant="h4" color="primary">
-                {totalWorkHours.toFixed(1)}j
+                {workableDays}
               </Typography>
               <Typography variant="subtitle1">
                 Jours facturables
@@ -356,7 +356,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
 
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="h4" color="info.main">
-                {data.filter(d => d.type === 'work' || d.type === 'half_off').length}
+                {totalWorkHours.toFixed(1)}
               </Typography>
               <Typography variant="subtitle1">
                 Jour(s) de présence

@@ -149,9 +149,14 @@ export default function ReportGenerator() {
   const getRowStyle = (type: PreviewData['type']) => {
     switch (type) {
       case 'weekend':
-      case 'holiday':
         return { 
           backgroundColor: 'rgba(0, 0.15, 0.1, 0.04)',
+          color: theme.palette.text.disabled,
+          fontStyle: 'normal' as const
+        };
+      case 'holiday':
+        return { 
+          backgroundColor: 'rgba(44, 250, 255, 0.19)',
           color: theme.palette.text.disabled,
           fontStyle: 'normal' as const
         };

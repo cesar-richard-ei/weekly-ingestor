@@ -224,9 +224,9 @@ async def generate_report(request: ReportRequest):
                     formatted_data.append({
                         "date": date.strftime("%d/%m/%Y"),
                         "client": " + ".join(clients),
-                        "duration": str(total_duration),
+                        "duration": total_duration,
                         "description": separator.join(descriptions),
-                        "type": "work"
+                        "type": "off" if all_off else "half_off" if has_off else "work"
                     })
             return JSONResponse(content=formatted_data)
 
