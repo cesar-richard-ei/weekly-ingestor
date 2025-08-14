@@ -379,7 +379,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
         
         <Grid container spacing={3}>
           {/* Compteurs principaux */}
-          <Grid item xs={12} md={6} lg={3}>
+          <Grid component="div" item xs={12} md={6} lg={3}>
             <Box sx={{ textAlign: 'center', mb: 2 }}>
               <Typography variant="h4" color="primary">
                 {occupancyData.workableDays}
@@ -409,7 +409,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           </Grid>
           
           {/* Graphique de répartition des types de jours */}
-          <Grid item xs={12} md={6} lg={3}>
+          <Grid component="div" item xs={12} md={6} lg={3}>
             <Typography variant="subtitle1" align="center" gutterBottom>
               Répartition des types de jours
             </Typography>
@@ -449,7 +449,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           </Grid>
           
           {/* Graphique de répartition par client */}
-          <Grid item xs={12} md={6} lg={6}>
+          <Grid component="div" item xs={12} md={6} lg={6}>
             <Typography variant="subtitle1" align="center" gutterBottom>
               Répartition par client (en jours)
             </Typography>
@@ -488,7 +488,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           
           {/* Graphique de distribution mensuelle (si assez de données) */}
           {monthlyBarData.length > 1 && (
-            <Grid item xs={12}>
+            <Grid component="div" item xs={12}>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle1" align="center" gutterBottom>
                 Distribution mensuelle
@@ -519,7 +519,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           
           <Grid container spacing={3}>
             {/* 1. Taux d'occupation et productivité */}
-            <Grid item xs={12} md={6}>
+            <Grid component="div" item xs={12} md={6}>
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle1" gutterBottom>
@@ -589,7 +589,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
             </Grid>
             
             {/* 2. Analyse des clients plus approfondie */}
-            <Grid item xs={12} md={6}>
+            <Grid component="div" item xs={12} md={6}>
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle1" gutterBottom>
@@ -606,7 +606,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                         {clientAnalysis.topClients.map((client, index) => {
                           const percentage = ((client.value / totalWorkHours) * 100).toFixed(0);
                           return (
-                            <Grid item xs={12} key={client.name}>
+                            <Grid component="div" item xs={12} key={client.name}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                 <Typography variant="body2" noWrap>
                                   {client.name}
@@ -719,7 +719,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
             </Grid>
             
             {/* Section des jours les plus prolifiques */}
-            <Grid item xs={12} md={6}>
+            <Grid component="div" item xs={12} md={6}>
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle1" gutterBottom>
@@ -765,12 +765,12 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
             </Grid>
             
             {/* 3-4. Métriques financières et Productivité */}
-            <Grid item xs={12}>
+            <Grid component="div" item xs={12}>
               <Card variant="outlined">
                 <CardContent>
                   <Grid container spacing={3}>
                     {/* Métriques financières */}
-                    <Grid item xs={12} md={6}>
+                    <Grid component="div" item xs={12} md={6}>
                       <Typography variant="subtitle1" gutterBottom>
                         Métriques financières
                       </Typography>
@@ -786,7 +786,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                     </Grid>
                     
                     {/* Productivité et planification */}
-                    <Grid item xs={12} md={6}>
+                    <Grid component="div" item xs={12} md={6}>
                       <Typography variant="subtitle1" gutterBottom>
                         Productivité et planification
                       </Typography>
