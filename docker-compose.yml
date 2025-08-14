@@ -26,4 +26,4 @@ services:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - api 
+      - api

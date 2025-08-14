@@ -21,6 +21,7 @@ export function useClientRates() {
   const [clientRates, setClientRates] = useState<ClientRate[]>(() => 
     getClientRatesFromStorage()
   );
+  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
   
   const queryClient = useQueryClient();
 
@@ -50,6 +51,9 @@ export function useClientRates() {
       
       return newRates;
     });
+    
+    // Forcer la mise à jour des composants qui utilisent ce hook
+    setLastUpdate(Date.now());
   }, [queryClient]);
 
   const removeClientRate = useCallback((clientName: string) => {
@@ -62,6 +66,9 @@ export function useClientRates() {
       
       return newRates;
     });
+    
+    // Forcer la mise à jour des composants qui utilisent ce hook
+    setLastUpdate(Date.now());
   }, [queryClient]);
 
   // Optimisation : mémoriser les clients avec leurs TJM
@@ -78,5 +85,6 @@ export function useClientRates() {
     setClientRate,
     removeClientRate,
     clientsWithRates,
+    lastUpdate, // Exposer le timestamp pour forcer les re-renders
   };
 } 
