@@ -1,67 +1,82 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-// Interface pour les TJM des clients
 export interface ClientRate {
   clientName: string;
   rate: number;
 }
 
-const LOCAL_STORAGE_KEY = 'client_daily_rates';
+const STORAGE_KEY = 'clientRates';
 
-// Helper pour récupérer les données du localStorage
 const getClientRatesFromStorage = (): ClientRate[] => {
-  const savedRates = localStorage.getItem(LOCAL_STORAGE_KEY);
-  return savedRates ? JSON.parse(savedRates) : [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
 };
 
-// Hook personnalisé pour gérer les TJM des clients
 export function useClientRates() {
-  // Initialiser l'état avec les valeurs du localStorage ou un tableau vide
-  const [clientRates, setClientRates] = useState<ClientRate[]>(getClientRatesFromStorage);
+  const [clientRates, setClientRates] = useState<ClientRate[]>(() => 
+    getClientRatesFromStorage()
+  );
+  
+  const queryClient = useQueryClient();
 
-  // Persister les changements dans le localStorage
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clientRates));
+  const getClientRate = useCallback((clientName: string): number => {
+    const client = clientRates.find(c => c.clientName === clientName);
+    return client ? client.rate : 0;
   }, [clientRates]);
 
-  // Fonction pour obtenir le TJM d'un client spécifique
-  const getClientRate = (clientName: string): number => {
-    // Recharger depuis le localStorage pour avoir les valeurs les plus récentes
-    const freshRates = getClientRatesFromStorage();
-    const clientRate = freshRates.find(rate => rate.clientName === clientName);
-    return clientRate ? clientRate.rate : 0; // TJM par défaut de 0€
-  };
+  const setClientRate = useCallback((clientName: string, rate: number) => {
+    setClientRates(prev => {
+      const existing = prev.find(c => c.clientName === clientName);
+      let newRates: ClientRate[];
+      
+      if (existing) {
+        newRates = prev.map(c => 
+          c.clientName === clientName ? { ...c, rate } : c
+        );
+      } else {
+        newRates = [...prev, { clientName, rate }];
+      }
+      
+      // Sauvegarder dans localStorage
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newRates));
+      
+      // Invalider le cache des rapports pour forcer la mise à jour des stats
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+      
+      return newRates;
+    });
+  }, [queryClient]);
 
-  // Fonction pour définir ou mettre à jour le TJM d'un client
-  const setClientRate = (clientName: string, rate: number) => {
-    const newRates = [...getClientRatesFromStorage()]; // Recharger les données avant la mise à jour
-    const clientIndex = newRates.findIndex(r => r.clientName === clientName);
-    
-    if (clientIndex >= 0) {
-      // Mettre à jour un TJM existant
-      newRates[clientIndex] = { clientName, rate };
-    } else {
-      // Ajouter un nouveau TJM
-      newRates.push({ clientName, rate });
-    }
-    
-    // Mettre à jour le localStorage directement
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newRates));
-    // Mettre à jour l'état local
-    setClientRates(newRates);
-  };
+  const removeClientRate = useCallback((clientName: string) => {
+    setClientRates(prev => {
+      const newRates = prev.filter(c => c.clientName !== clientName);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newRates));
+      
+      // Invalider le cache des rapports
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+      
+      return newRates;
+    });
+  }, [queryClient]);
 
-  // Fonction pour supprimer le TJM d'un client
-  const removeClientRate = (clientName: string) => {
-    const newRates = getClientRatesFromStorage().filter(rate => rate.clientName !== clientName);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newRates));
-    setClientRates(newRates);
-  };
+  // Optimisation : mémoriser les clients avec leurs TJM
+  const clientsWithRates = useMemo(() => {
+    return clientRates.reduce((acc, client) => {
+      acc[client.clientName] = client.rate;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [clientRates]);
 
   return {
     clientRates,
     getClientRate,
     setClientRate,
-    removeClientRate
+    removeClientRate,
+    clientsWithRates,
   };
 } 

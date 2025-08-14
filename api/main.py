@@ -214,6 +214,7 @@ async def generate_report(request: ReportRequest):
                         # Vérifier si c'est un jour OFF pour ce client
                         all_off = all(note.strip() == "OFF" for note in client_entries)
                         has_off = any(note.strip() == "OFF" for note in client_entries)
+                        client_entries = client_entries.sort()
                         duration = 0 if all_off else 0.5 if has_off else 1
                         total_duration += duration
 

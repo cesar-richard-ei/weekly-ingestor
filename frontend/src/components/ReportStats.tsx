@@ -4,6 +4,7 @@ import { PreviewData } from './ReportGenerator';
 import Holidays from 'date-holidays';
 import { parse, isWeekend, format, getDay, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useMemo } from 'react';
 
 // Palette de couleurs adaptée aux graphiques
 const COLORS = ['#2196F3', '#4CAF50', '#FFC107', '#FF5722', '#9C27B0', '#3F51B5', '#009688', '#E91E63'];
@@ -28,297 +29,340 @@ interface ReportStatsProps {
 export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
   const theme = useTheme();
   // Initialisation du calendrier des jours fériés français
-  const hd = new Holidays('FR');
+  const hd = useMemo(() => new Holidays('FR'), []);
 
-  // Statistiques par client (avec les clients réellement sélectionnés)
-  const clientStats = data
-    .filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0')
-    .reduce((acc: { [key: string]: { hours: number; revenue: number } }, curr) => {
-      if (!curr.client) return acc;
-      
-      // Traiter chaque client individuellement
-      const clients = curr.client.split(" + ");
-      clients.forEach(client => {
-        const clientName = client.trim();
-        if (!acc[clientName]) {
-          acc[clientName] = { hours: 0, revenue: 0 };
-        }
+  // Statistiques par client (avec les clients réellement sélectionnés) - optimisé avec useMemo
+  const clientStats = useMemo(() => {
+    return data
+      .filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0')
+      .reduce((acc: { [key: string]: { hours: number; revenue: number } }, curr) => {
+        if (!curr.client) return acc;
         
-        // Durée proportionnelle au nombre de clients
-        const duration = parseFloat(curr.duration) / clients.length;
-        acc[clientName].hours += duration;
+        // Traiter chaque client individuellement
+        const clients = curr.client.split(" + ");
+        clients.forEach(client => {
+          const clientName = client.trim();
+          if (!acc[clientName]) {
+            acc[clientName] = { hours: 0, revenue: 0 };
+          }
+          
+          // Durée proportionnelle au nombre de clients
+          const duration = parseFloat(curr.duration) / clients.length;
+          acc[clientName].hours += duration;
+          
+          // Calculer le revenu avec le TJM spécifique à ce client
+          const clientRate = getClientRate(clientName);
+          acc[clientName].revenue += duration * clientRate;
+        });
         
-        // Calculer le revenu avec le TJM spécifique à ce client
-        const clientRate = getClientRate(clientName);
-        acc[clientName].revenue += duration * clientRate;
+        return acc;
+      }, {});
+  }, [data, getClientRate]);
+
+  const clientBarData = useMemo(() => {
+    return Object.entries(clientStats)
+      .map(([name, data]) => ({ 
+        name, 
+        value: parseFloat(data.hours.toFixed(2)),
+        revenue: data.revenue
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [clientStats]);
+
+  // Calcul des statistiques par date - optimisé avec useMemo
+  const statsByDate = useMemo(() => {
+    return data.reduce((acc: { [key: string]: { 
+      workDays: number,
+      halfDays: number,
+      offDays: number,
+      totalDuration: number,
+      type: string
+    }}, curr) => {
+      if (!acc[curr.date]) {
+        acc[curr.date] = {
+          workDays: 0,
+          halfDays: 0,
+          offDays: 0,
+          totalDuration: 0,
+          type: curr.type
+        };
+      }
+
+      if (curr.type === 'work' && curr.duration !== '0') {
+        acc[curr.date].workDays += 1;
+        acc[curr.date].totalDuration += parseFloat(curr.duration);
+      } else if (curr.type === 'half_off') {
+        acc[curr.date].halfDays += 1;
+        acc[curr.date].totalDuration += parseFloat(curr.duration);
+      } else if (curr.type === 'off' || (curr.type === 'work' && curr.duration === '0')) {
+        acc[curr.date].offDays += 1;
+      }
+
+      return acc;
+    }, {});
+  }, [data]);
+
+  // Statistiques de répartition des jours - optimisé avec useMemo
+  const dayStats = useMemo(() => {
+    const workDays = Object.values(statsByDate).filter(s => s.totalDuration > 0 && s.type === 'work').length;
+    const halfDays = Object.values(statsByDate).filter(s => s.type === 'half_off').length;
+    const offDays = Object.values(statsByDate).filter(s => s.type === 'off').length;
+    const weekendDays = data.filter(d => d.type === 'weekend').length;
+    const holidayDays = data.filter(d => d.type === 'holiday').length;
+
+    return { workDays, halfDays, offDays, weekendDays, holidayDays };
+  }, [statsByDate, data]);
+
+  // Calcul des jours non saisis (hors weekends et jours fériés) - optimisé avec useMemo
+  const nonFilledDays = useMemo(() => {
+    return data.filter(d => {
+      if (d.type !== 'empty') return false;
+      const date = parse(d.date, 'dd/MM/yyyy', new Date());
+      if (isWeekend(date)) return false;
+      const isHoliday = hd.isHoliday(date);
+      return !isHoliday;
+    }).length;
+  }, [data, hd]);
+
+  // Calcul du total des heures travaillées - optimisé avec useMemo
+  const totalWorkHours = useMemo(() => {
+    return Object.values(statsByDate)
+      .reduce((acc, curr) => acc + curr.totalDuration, 0);
+  }, [statsByDate]);
+
+  // Calcul du CA total en utilisant les TJM spécifiques par client - optimisé avec useMemo
+  const totalRevenue = useMemo(() => {
+    return Object.values(clientStats)
+      .reduce((acc, curr) => acc + curr.revenue, 0);
+  }, [clientStats]);
+
+  // Données pour le graphique en camembert des types de jours - optimisé avec useMemo
+  const dayTypePieData = useMemo(() => {
+    return [
+      { name: 'Jours travaillés', value: dayStats.workDays, color: DAY_COLORS.work },
+      { name: 'Demi-journées', value: dayStats.halfDays, color: DAY_COLORS.half_off },
+      { name: 'Jours off', value: dayStats.offDays, color: DAY_COLORS.off },
+      { name: 'Week-ends', value: dayStats.weekendDays, color: DAY_COLORS.weekend },
+      { name: 'Jours fériés', value: dayStats.holidayDays, color: DAY_COLORS.holiday },
+    ].filter(item => item.value > 0);
+  }, [dayStats]);
+
+  // Distribution par mois si la période est suffisamment longue - optimisé avec useMemo
+  const monthlyBarData = useMemo(() => {
+    const monthlyData = data
+      .filter(d => d.type === 'work' || d.type === 'half_off')
+      .reduce((acc: { [key: string]: number }, curr) => {
+        const date = parse(curr.date, 'dd/MM/yyyy', new Date());
+        const monthYear = format(date, 'MMM yyyy', { locale: fr });
+        
+        acc[monthYear] = (acc[monthYear] || 0) + parseFloat(curr.duration);
+        return acc;
+      }, {});
+
+    return Object.entries(monthlyData)
+      .map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }))
+      .sort((a, b) => {
+        // Trier par date
+        const dateA = parse(a.name, 'MMM yyyy', new Date(), { locale: fr });
+        const dateB = parse(b.name, 'MMM yyyy', new Date(), { locale: fr });
+        return dateA.getTime() - dateB.getTime();
       });
-      
-      return acc;
-    }, {});
-
-  const clientBarData = Object.entries(clientStats)
-    .map(([name, data]) => ({ 
-      name, 
-      value: parseFloat(data.hours.toFixed(2)),
-      revenue: data.revenue
-    }))
-    .sort((a, b) => b.value - a.value);
-
-  // Calcul des statistiques par date
-  const statsByDate = data.reduce((acc: { [key: string]: { 
-    workDays: number,
-    halfDays: number,
-    offDays: number,
-    totalDuration: number,
-    type: string
-  }}, curr) => {
-    if (!acc[curr.date]) {
-      acc[curr.date] = {
-        workDays: 0,
-        halfDays: 0,
-        offDays: 0,
-        totalDuration: 0,
-        type: curr.type
-      };
-    }
-
-    if (curr.type === 'work' && curr.duration !== '0') {
-      acc[curr.date].workDays += 1;
-      acc[curr.date].totalDuration += parseFloat(curr.duration);
-    } else if (curr.type === 'half_off') {
-      acc[curr.date].halfDays += 1;
-      acc[curr.date].totalDuration += parseFloat(curr.duration);
-    } else if (curr.type === 'off' || (curr.type === 'work' && curr.duration === '0')) {
-      acc[curr.date].offDays += 1;
-    }
-
-    return acc;
-  }, {});
-
-  // Statistiques de répartition des jours
-  const workDays = Object.values(statsByDate).filter(s => s.totalDuration > 0 && s.type === 'work').length;
-  const halfDays = Object.values(statsByDate).filter(s => s.type === 'half_off').length;
-  const offDays = Object.values(statsByDate).filter(s => s.type === 'off').length;
-  const weekendDays = data.filter(d => d.type === 'weekend').length;
-  const holidayDays = data.filter(d => d.type === 'holiday').length;
-
-  // Calcul des jours non saisis (hors weekends et jours fériés)
-  const nonFilledDays = data.filter(d => {
-    if (d.type !== 'empty') return false;
-    const date = parse(d.date, 'dd/MM/yyyy', new Date());
-    if (isWeekend(date)) return false;
-    const isHoliday = hd.isHoliday(date);
-    return !isHoliday;
-  }).length;
-
-  // Calcul du total des heures travaillées
-  const totalWorkHours = Object.values(statsByDate)
-    .reduce((acc, curr) => acc + curr.totalDuration, 0);
-
-  // Calcul du CA total en utilisant les TJM spécifiques par client
-  const totalRevenue = Object.values(clientStats)
-    .reduce((acc, curr) => acc + curr.revenue, 0);
-
-  // Données pour le graphique en camembert des types de jours
-  const dayTypePieData = [
-    { name: 'Jours travaillés', value: workDays, color: DAY_COLORS.work },
-    { name: 'Demi-journées', value: halfDays, color: DAY_COLORS.half_off },
-    { name: 'Jours off', value: offDays, color: DAY_COLORS.off },
-    { name: 'Week-ends', value: weekendDays, color: DAY_COLORS.weekend },
-    { name: 'Jours fériés', value: holidayDays, color: DAY_COLORS.holiday },
-  ].filter(item => item.value > 0);
-
-  // Distribution par mois si la période est suffisamment longue
-  const monthlyData = data
-    .filter(d => d.type === 'work' || d.type === 'half_off')
-    .reduce((acc: { [key: string]: number }, curr) => {
-      const date = parse(curr.date, 'dd/MM/yyyy', new Date());
-      const monthYear = format(date, 'MMM yyyy', { locale: fr });
-      
-      acc[monthYear] = (acc[monthYear] || 0) + parseFloat(curr.duration);
-      return acc;
-    }, {});
-
-  const monthlyBarData = Object.entries(monthlyData)
-    .map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }))
-    .sort((a, b) => {
-      // Trier par date
-      const dateA = parse(a.name, 'MMM yyyy', new Date(), { locale: fr });
-      const dateB = parse(b.name, 'MMM yyyy', new Date(), { locale: fr });
-      return dateA.getTime() - dateB.getTime();
-    });
+  }, [data]);
 
   // Vérifier s'il y a assez de données
   const hasEnoughDataForCharts = totalWorkHours > 0;
   
-  // Nouvelles métriques avancées
+  // Nouvelles métriques avancées - optimisées avec useMemo
   
   // 1. Taux d'occupation et productivité
-  // Calculer le nombre total de jours ouvrables dans la période (hors weekends et jours fériés)
-  let workableDays = 0;
-  let firstDate: Date | null = null;
-  let lastDate: Date | null = null;
-  
-  // Extraire les dates min et max de la période
-  data.forEach(item => {
-    const currentDate = parse(item.date, 'dd/MM/yyyy', new Date());
-    if (!firstDate || currentDate < firstDate) firstDate = currentDate;
-    if (!lastDate || currentDate > lastDate) lastDate = currentDate;
-  });
-  
-  // Calculer le nombre de jours ouvrables
-  if (firstDate && lastDate) {
-    let currentDate = firstDate;
-    while (currentDate <= lastDate) {
-      if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
-        workableDays++;
+  const occupancyData = useMemo(() => {
+    // Calculer le nombre total de jours ouvrables dans la période (hors weekends et jours fériés)
+    let workableDays = 0;
+    let firstDate: Date | null = null;
+    let lastDate: Date | null = null;
+    
+    // Extraire les dates min et max de la période
+    data.forEach(item => {
+      const currentDate = parse(item.date, 'dd/MM/yyyy', new Date());
+      if (!firstDate || currentDate < firstDate) firstDate = currentDate;
+      if (!lastDate || currentDate > lastDate) lastDate = currentDate;
+    });
+    
+    // Calculer le nombre de jours ouvrables
+    if (firstDate && lastDate) {
+      let currentDate = firstDate;
+      while (currentDate <= lastDate) {
+        if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
+          workableDays++;
+        }
+        currentDate = addDays(currentDate, 1);
       }
-      currentDate = addDays(currentDate, 1);
-    }
-  }
-  
-  // Taux d'occupation (jours travaillés / jours ouvrables)
-  const occupancyRate = workableDays > 0 
-    ? (totalWorkHours / workableDays) * 100
-    : 0;
-    
-  // Répartition par jour de la semaine
-  const weekdayDistribution = Array(7).fill(0);
-  data.forEach(item => {
-    if (item.type === 'work' || item.type === 'half_off') {
-      const date = parse(item.date, 'dd/MM/yyyy', new Date());
-      const dayOfWeek = getDay(date);
-      weekdayDistribution[dayOfWeek] += parseFloat(item.duration);
-    }
-  });
-  
-  const weekdayData = weekdayDistribution.map((value, index) => ({
-    name: WEEKDAYS[index],
-    value: parseFloat(value.toFixed(2))
-  })).filter((_, index) => index !== 0 && index !== 6); // Filtrer weekend si souhaité
-  
-  // Tendance d'activité quotidienne
-  const dailyActivityData: { date: string; value: number }[] = [];
-  
-  if (firstDate && lastDate) {
-    const dateMap = new Map<string, number>();
-    
-    // Initialiser toutes les dates dans la période
-    let currentDate = firstDate;
-    while (currentDate <= lastDate) {
-      if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
-        const dateStr = format(currentDate, 'dd/MM');
-        dateMap.set(dateStr, 0);
-      }
-      currentDate = addDays(currentDate, 1);
     }
     
-    // Remplir avec les données réelles
+    // Taux d'occupation (jours travaillés / jours ouvrables)
+    const occupancyRate = workableDays > 0 
+      ? (totalWorkHours / workableDays) * 100
+      : 0;
+
+    return { workableDays, firstDate, lastDate, occupancyRate };
+  }, [data, hd, totalWorkHours]);
+    
+  // Répartition par jour de la semaine - optimisé avec useMemo
+  const weekdayData = useMemo(() => {
+    const weekdayDistribution = Array(7).fill(0);
     data.forEach(item => {
       if (item.type === 'work' || item.type === 'half_off') {
         const date = parse(item.date, 'dd/MM/yyyy', new Date());
-        const dateStr = format(date, 'dd/MM');
-        dateMap.set(dateStr, (dateMap.get(dateStr) || 0) + parseFloat(item.duration));
+        const dayOfWeek = getDay(date);
+        weekdayDistribution[dayOfWeek] += parseFloat(item.duration);
       }
     });
     
-    // Convertir en tableau pour le graphique
-    dateMap.forEach((value, date) => {
-      dailyActivityData.push({ date, value: parseFloat(value.toFixed(1)) });
-    });
+    return weekdayDistribution.map((value, index) => ({
+      name: WEEKDAYS[index],
+      value: parseFloat(value.toFixed(2))
+    })).filter((_, index) => index !== 0 && index !== 6); // Filtrer weekend si souhaité
+  }, [data]);
+  
+  // Tendance d'activité quotidienne - optimisé avec useMemo
+  const dailyActivityData = useMemo(() => {
+    const dailyActivityData: { date: string; value: number }[] = [];
     
-    // Trier par date
-    dailyActivityData.sort((a, b) => {
-      const dateA = parse(a.date, 'dd/MM', new Date());
-      const dateB = parse(b.date, 'dd/MM', new Date());
-      return dateA.getTime() - dateB.getTime();
-    });
-  }
-  
-  // 2. Analyse des clients plus approfondie
-  // Top clients
-  const topClients = clientBarData.slice(0, 3);
-  
-  // Calcul de la diversification (indice de concentration)
-  // On utilise un indice d'Herfindahl-Hirschman simplifié
-  let diversificationIndex = 0;
-  if (clientBarData.length > 0) {
-    const totalClientWork = clientBarData.reduce((sum, item) => sum + item.value, 0);
-    diversificationIndex = clientBarData.reduce((sum, item) => {
-      const share = item.value / totalClientWork;
-      return sum + (share * share);
-    }, 0);
-  }
-  
-  // Interprétation de l'indice de diversification
-  let diversificationText = "";
-  if (diversificationIndex >= 0.6) diversificationText = "Faible";
-  else if (diversificationIndex > 0.4) diversificationText = "Moyenne";
-  else if (diversificationIndex > 0.2) diversificationText = "Bonne";
-  
-  // Calcul des revenus par jour pour identifier les jours les plus prolifiques
-  const revenueByDay: { [key: string]: number } = {};
-  
-  data.forEach(item => {
-    if ((item.type === 'work' || item.type === 'half_off') && item.client && item.duration !== '0') {
-      if (!revenueByDay[item.date]) {
-        revenueByDay[item.date] = 0;
+    if (occupancyData.firstDate && occupancyData.lastDate) {
+      const dateMap = new Map<string, number>();
+      
+      // Initialiser toutes les dates dans la période
+      let currentDate = occupancyData.firstDate;
+      while (currentDate <= occupancyData.lastDate) {
+        if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
+          const dateStr = format(currentDate, 'dd/MM');
+          dateMap.set(dateStr, 0);
+        }
+        currentDate = addDays(currentDate, 1);
       }
       
-      const clients = item.client.split(" + ");
-      const duration = parseFloat(item.duration) / clients.length;
+      // Remplir avec les données réelles
+      data.forEach(item => {
+        if (item.type === 'work' || item.type === 'half_off') {
+          const date = parse(item.date, 'dd/MM/yyyy', new Date());
+          const dateStr = format(date, 'dd/MM');
+          dateMap.set(dateStr, (dateMap.get(dateStr) || 0) + parseFloat(item.duration));
+        }
+      });
       
-      clients.forEach(client => {
-        const clientName = client.trim();
-        const rate = getClientRate(clientName);
-        revenueByDay[item.date] += duration * rate;
+      // Convertir en tableau pour le graphique
+      dateMap.forEach((value, date) => {
+        dailyActivityData.push({ date, value: parseFloat(value.toFixed(1)) });
+      });
+      
+      // Trier par date
+      dailyActivityData.sort((a, b) => {
+        const dateA = parse(a.date, 'dd/MM', new Date());
+        const dateB = parse(b.date, 'dd/MM', new Date());
+        return dateA.getTime() - dateB.getTime();
       });
     }
-  });
+    
+    return dailyActivityData;
+  }, [data, hd, occupancyData.firstDate, occupancyData.lastDate]);
   
-  // Transformer en tableau pour affichage
-  const topRevenueDays = Object.entries(revenueByDay)
-    .map(([date, revenue]) => ({ date, revenue }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-  
-  // 3. Visualisations avancées
-  // Données pour le graphique en radar de répartition client / temps
-  const radarData = clientBarData.slice(0, 5).map(client => {
-    const obj: Record<string, any> = { name: client.name };
-    obj.value = client.value;
-    return obj;
-  });
-  
-  // 4. Métriques financières
-  // Moyenne du revenu quotidien
-  let avgDailyRevenue = totalRevenue / workableDays;
-  
-  // Récupération des jours avec clients et nombre moyen de clients par jour
-  const daysWithClients = new Set<string>();
-  let totalClients = 0;
-  let avgClientsPerDay = 0;
-  
-  data.forEach(item => {
-    if (item.type === 'work' && item.client) {
-      daysWithClients.add(item.date);
-      const clientCount = item.client.split(" + ").length;
-      totalClients += clientCount;
+  // 2. Analyse des clients plus approfondie - optimisé avec useMemo
+  const clientAnalysis = useMemo(() => {
+    // Top clients
+    const topClients = clientBarData.slice(0, 3);
+    
+    // Calcul de la diversification (indice de concentration)
+    // On utilise un indice d'Herfindahl-Hirschman simplifié
+    let diversificationIndex = 0;
+    if (clientBarData.length > 0) {
+      const totalClientWork = clientBarData.reduce((sum, item) => sum + item.value, 0);
+      diversificationIndex = clientBarData.reduce((sum, item) => {
+        const share = item.value / totalClientWork;
+        return sum + (share * share);
+      }, 0);
     }
-  });
+    
+    // Interprétation de l'indice de diversification
+    let diversificationText = "";
+    if (diversificationIndex >= 0.6) diversificationText = "Faible";
+    else if (diversificationIndex > 0.4) diversificationText = "Moyenne";
+    else if (diversificationIndex > 0.2) diversificationText = "Bonne";
+    
+    return { topClients, diversificationIndex, diversificationText };
+  }, [clientBarData]);
   
-  if (daysWithClients.size > 0) {
-    avgClientsPerDay = totalClients / daysWithClients.size;
-  }
+  // Calcul des revenus par jour pour identifier les jours les plus prolifiques - optimisé avec useMemo
+  const topRevenueDays = useMemo(() => {
+    const revenueByDay: { [key: string]: number } = {};
+    
+    data.forEach(item => {
+      if ((item.type === 'work' || item.type === 'half_off') && item.client && item.duration !== '0') {
+        if (!revenueByDay[item.date]) {
+          revenueByDay[item.date] = 0;
+        }
+        
+        const clients = item.client.split(" + ");
+        const duration = parseFloat(item.duration) / clients.length;
+        
+        clients.forEach(client => {
+          const clientName = client.trim();
+          const rate = getClientRate(clientName);
+          revenueByDay[item.date] += duration * rate;
+        });
+      }
+    });
+    
+    // Transformer en tableau pour affichage
+    return Object.entries(revenueByDay)
+      .map(([date, revenue]) => ({ date, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [data, getClientRate]);
   
-  // Ajouter un visuel pour les TJM par client dans la section Analyse des clients
-  const clientRatesData = clientBarData.slice(0, 5).map(client => {
-    const rate = getClientRate(client.name);
-    return {
-      name: client.name,
-      rate
-    };
-  });
+  // 3. Visualisations avancées - optimisé avec useMemo
+  const radarData = useMemo(() => {
+    return clientBarData.slice(0, 5).map(client => {
+      const obj: Record<string, any> = { name: client.name };
+      obj.value = client.value;
+      return obj;
+    });
+  }, [clientBarData]);
+  
+  // 4. Métriques financières - optimisé avec useMemo
+  const financialMetrics = useMemo(() => {
+    // Moyenne du revenu quotidien
+    let avgDailyRevenue = totalRevenue / occupancyData.workableDays;
+    
+    // Récupération des jours avec clients et nombre moyen de clients par jour
+    const daysWithClients = new Set<string>();
+    let totalClients = 0;
+    let avgClientsPerDay = 0;
+    
+    data.forEach(item => {
+      if (item.type === 'work' && item.client) {
+        daysWithClients.add(item.date);
+        const clientCount = item.client.split(" + ").length;
+        totalClients += clientCount;
+      }
+    });
+    
+    if (daysWithClients.size > 0) {
+      avgClientsPerDay = totalClients / daysWithClients.size;
+    }
+    
+    return { avgDailyRevenue, avgClientsPerDay };
+  }, [totalRevenue, occupancyData.workableDays, data]);
+  
+  // Ajouter un visuel pour les TJM par client dans la section Analyse des clients - optimisé avec useMemo
+  const clientRatesData = useMemo(() => {
+    return clientBarData.slice(0, 5).map(client => {
+      const rate = getClientRate(client.name);
+      return {
+        name: client.name,
+        rate
+      };
+    });
+  }, [clientBarData, getClientRate]);
 
   return (
     <>
@@ -338,7 +382,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
           <Grid item xs={12} md={6} lg={3}>
             <Box sx={{ textAlign: 'center', mb: 2 }}>
               <Typography variant="h4" color="primary">
-                {workableDays}
+                {occupancyData.workableDays}
               </Typography>
               <Typography variant="subtitle1">
                 Jours facturables
@@ -486,14 +530,14 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="body2">Taux d'occupation</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {occupancyRate.toFixed(0)}%
+                        {occupancyData.occupancyRate.toFixed(0)}%
                       </Typography>
                     </Box>
-                    <MuiTooltip title={`${totalWorkHours.toFixed(1)} jours facturés sur ${workableDays} jours ouvrables disponibles`}>
+                    <MuiTooltip title={`${totalWorkHours.toFixed(1)} jours facturés sur ${occupancyData.workableDays} jours ouvrables disponibles`}>
                       <LinearProgress 
                         variant="determinate" 
-                        value={Math.min(occupancyRate, 100)} 
-                        color={occupancyRate > 80 ? "success" : occupancyRate > 50 ? "primary" : "warning"}
+                        value={Math.min(occupancyData.occupancyRate, 100)} 
+                        color={occupancyData.occupancyRate > 80 ? "success" : occupancyData.occupancyRate > 50 ? "primary" : "warning"}
                         sx={{ height: 8, borderRadius: 1 }}
                       />
                     </MuiTooltip>
@@ -552,14 +596,14 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                     Analyse des clients
                   </Typography>
                   
-                  {topClients.length > 0 && (
+                  {clientAnalysis.topClients.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" sx={{ mb: 1 }}>
                         Top clients
                       </Typography>
                       
                       <Grid container spacing={1}>
-                        {topClients.map((client, index) => {
+                        {clientAnalysis.topClients.map((client, index) => {
                           const percentage = ((client.value / totalWorkHours) * 100).toFixed(0);
                           return (
                             <Grid item xs={12} key={client.name}>
@@ -593,7 +637,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                     
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                       <Typography variant="body2">
-                        Indice de concentration: {diversificationIndex.toFixed(2)}
+                        Indice de concentration: {clientAnalysis.diversificationIndex.toFixed(2)}
                       </Typography>
                       <MuiTooltip title="Mesure la répartition de votre activité entre différents clients. Plus l'indice est bas, plus votre activité est diversifiée.">
                         <Box component="span" sx={{ ml: 1, cursor: 'help', color: 'text.secondary', fontSize: '0.8rem' }}>
@@ -607,11 +651,11 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                         Niveau de diversification
                       </Typography>
                       <Chip 
-                        label={diversificationText} 
+                        label={clientAnalysis.diversificationText} 
                         size="small" 
                         color={
-                          diversificationText === "Faible" ? "success" :
-                          diversificationText === "Moyenne" ? "warning" :
+                          clientAnalysis.diversificationText === "Faible" ? "success" :
+                          clientAnalysis.diversificationText === "Moyenne" ? "warning" :
                           "error"
                         }
                       />
@@ -652,7 +696,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                   )}
 
                   {/* Code pour afficher les TJM par client */}
-                  {topClients.length > 0 && (
+                  {clientAnalysis.topClients.length > 0 && (
                     <Box sx={{ mt: 2 }}>
                       <Typography variant="body2" sx={{ mb: 1 }}>
                         TJM par client
@@ -736,7 +780,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                           Moyenne du revenu quotidien
                         </Typography>
                         <Typography variant="h5" color="success.main">
-                          {avgDailyRevenue.toLocaleString()} €
+                          {financialMetrics.avgDailyRevenue.toLocaleString()} €
                         </Typography>
                       </Box>
                     </Grid>
@@ -758,7 +802,7 @@ export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
                             </MuiTooltip>
                           </Typography>
                           <Typography variant="body2" fontWeight="bold">
-                            {avgClientsPerDay.toFixed(1)} clients/jour
+                            {financialMetrics.avgClientsPerDay.toFixed(1)} clients/jour
                           </Typography>
                         </Box>
                       </Box>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Paper, 
   Button, 
@@ -25,10 +25,10 @@ import {
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
-import axios from 'axios';
-import { API_URL } from '../config';
 import ReportStats from './ReportStats';
 import { useClientRates } from '../hooks/useClientRates';
+import { useClients, useClientNames } from '../hooks/useClients';
+import { useReportGeneration, useReportPreview, useUniqueClientsFromReport } from '../hooks/useReportGeneration';
 import ClientRatesEditor from './ClientRatesEditor';
 
 export interface PreviewData {
@@ -43,78 +43,74 @@ export default function ReportGenerator() {
   const theme = useTheme();
   const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().startOf('month'));
   const [endDate, setEndDate] = useState<Dayjs | null>(dayjs().endOf('month'));
-  const [loading, setLoading] = useState(false);
-  const [loadingClients, setLoadingClients] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [previewData, setPreviewData] = useState<PreviewData[] | null>(null);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [hasPreview, setHasPreview] = useState(false);
-  const [uniqueClients, setUniqueClients] = useState<string[]>([]);
-  const { getClientRate } = useClientRates();
-  const [statsKey, setStatsKey] = useState(0); // Compteur pour forcer le re-rendu
 
-  // Charger la liste des clients au chargement du composant
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  // Hooks React Query
+  const { data: clients, isLoading: loadingClients, error: clientsError } = useClients();
+  const { clientNames } = useClientNames();
+  const { previewMutation, downloadMutation, isLoading, error } = useReportGeneration();
+  
+  // Hook pour la prévisualisation avec cache
+  const { 
+    data: previewData, 
+    error: previewError 
+  } = useReportPreview(startDate, endDate, selectedClients, hasPreview);
 
-  // Fonction pour récupérer la liste des clients depuis l'API Timely
-  const fetchClients = async () => {
-    setLoadingClients(true);
-    try {
-      const response = await axios.get(`${API_URL}/clients`);
-      if (Array.isArray(response.data)) {
-        // Extraire les noms des clients de la réponse
-        const clientNames = response.data.map((client: any) => client.name);
-        setUniqueClients(clientNames.sort());
-        // Par défaut, tous les clients sont sélectionnés
-        setSelectedClients(clientNames.sort());
-      }
-    } catch (err: any) {
-      console.error("Erreur lors de la récupération des clients:", err);
-      // On ne met pas d'erreur dans l'interface pour ne pas bloquer l'utilisateur
-    } finally {
-      setLoadingClients(false);
+  // Hook pour extraire les clients uniques du rapport
+  const { data: uniqueClientsFromReport } = useUniqueClientsFromReport(previewData);
+
+  // Utiliser les clients de l'API ou ceux extraits du rapport
+  const uniqueClients = useMemo(() => {
+    if (clients && clients.length > 0) {
+      return clientNames;
     }
-  };
+    return uniqueClientsFromReport || [];
+  }, [clients, clientNames, uniqueClientsFromReport]);
 
-  // Cette fonction recalcule les clients uniques à partir des données de prévisualisation
-  const extractUniqueClients = (data: PreviewData[]) => {
-    const clientSet = new Set<string>();
-    
-    data.forEach(item => {
-      if (item.client && item.type === 'work') {
-        const clients = item.client.split(" + ");
-        clients.forEach(client => clientSet.add(client.trim()));
-      }
-    });
-    
-    return Array.from(clientSet).sort();
-  };
-
-  // Force la mise à jour des statistiques quand les TJM changent
-  const handleRatesChanged = () => {
-    // Incrémenter la clé pour forcer un re-rendu complet
-    setStatsKey(prev => prev + 1);
-  };
+  // Initialiser les clients sélectionnés quand ils sont disponibles
+  useEffect(() => {
+    if (uniqueClients.length > 0 && selectedClients.length === 0) {
+      setSelectedClients([...uniqueClients]);
+    }
+  }, [uniqueClients, selectedClients.length]);
 
   // Mise à jour du filteredPreviewData pour s'assurer que la logique de filtrage reste cohérente
-  const filteredPreviewData = previewData
-    ? selectedClients.length > 0
-      ? previewData.filter(row => {
-          if (row.type === 'weekend' || row.type === 'empty' || row.type === 'holiday') return true;
-          
-          // Si c'est un jour de travail, vérifier si au moins un des clients est sélectionné
-          if (row.client) {
-            const rowClients = row.client.split(" + ").map(c => c.trim());
-            return rowClients.some(client => selectedClients.includes(client));
-          }
-          return false;
-        })
-      : previewData
-    : null;
+  const filteredPreviewData = useMemo(() => {
+    if (!previewData) return null;
+    
+    if (selectedClients.length === 0) return previewData;
+    
+    return previewData.filter(row => {
+      if (row.type === 'weekend' || row.type === 'empty' || row.type === 'holiday') return true;
+      
+      // Si c'est un jour de travail, vérifier si au moins un des clients est sélectionné
+      if (row.client) {
+        const rowClients = row.client.split(" + ").map(c => c.trim());
+        return rowClients.some(client => selectedClients.includes(client));
+      }
+      return false;
+    });
+  }, [previewData, selectedClients]);
 
-  const handleClientToggle = (client: string) => {
+  // Calcul du total des durées - optimisé avec useMemo
+  const totalDuration = useMemo(() => {
+    if (!filteredPreviewData) return '0.00';
+    
+    return filteredPreviewData
+      .filter(row => row.type === 'work' || row.type === 'half_off')
+      .reduce((acc, row) => acc + parseFloat(row.duration), 0)
+      .toFixed(2);
+  }, [filteredPreviewData]);
+
+  const { getClientRate } = useClientRates();
+
+  // Force la mise à jour des statistiques quand les TJM changent
+  const handleRatesChanged = useCallback(() => {
+    // React Query gère automatiquement la mise à jour
+  }, []);
+
+  const handleClientToggle = useCallback((client: string) => {
     setSelectedClients(prev => {
       // Si le client est déjà sélectionné, on le retire
       if (prev.includes(client)) {
@@ -123,30 +119,17 @@ export default function ReportGenerator() {
       // Sinon on l'ajoute
       return [...prev, client];
     });
-    // Forcer la mise à jour des statistiques
-    setStatsKey(prev => prev + 1);
-  };
+  }, []);
 
-  const selectAllClients = () => {
+  const selectAllClients = useCallback(() => {
     setSelectedClients([...uniqueClients]);
-    // Forcer la mise à jour des statistiques
-    setStatsKey(prev => prev + 1);
-  };
+  }, [uniqueClients]);
 
-  const unselectAllClients = () => {
+  const unselectAllClients = useCallback(() => {
     setSelectedClients([]);
-    // Forcer la mise à jour des statistiques
-    setStatsKey(prev => prev + 1);
-  };
+  }, []);
 
-  const calculateTotalDuration = (data: PreviewData[]) => {
-    return data
-      .filter(row => row.type === 'work' || row.type === 'half_off')
-      .reduce((acc, row) => acc + parseFloat(row.duration), 0)
-      .toFixed(2);
-  };
-
-  const getRowStyle = (type: PreviewData['type']) => {
+  const getRowStyle = useCallback((type: PreviewData['type']) => {
     switch (type) {
       case 'weekend':
         return { 
@@ -176,55 +159,64 @@ export default function ReportGenerator() {
           fontStyle: 'normal' as const
         };
     }
-  };
+  }, [theme.palette.text.disabled]);
 
-  const generateReport = async (download = true) => {
+  // Handlers pour la génération de rapports
+  const handlePreviewReport = useCallback(async () => {
     if (!startDate || !endDate) return;
-
-    setLoading(true);
-    setError(null);
-
+    
+    setHasPreview(true);
+    
     try {
-      const response = await axios.post(`${API_URL}/generate-report`, {
+      await previewMutation.mutateAsync({
         from_date: startDate.format('YYYY-MM-DD'),
         to_date: endDate.format('YYYY-MM-DD'),
-        format: download ? 'excel' : 'json',
         client_filter: selectedClients
-      }, {
-        responseType: download ? 'blob' : 'json'
       });
-
-      if (download) {
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'imputations.xlsx');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } else if (Array.isArray(response.data)) {
-        setPreviewData(response.data);
-        
-        // Si on n'a pas encore de clients chargés depuis l'API, extrayons-les des données
-        if (uniqueClients.length === 0) {
-          const uniqueClientsList = extractUniqueClients(response.data);
-          setUniqueClients(uniqueClientsList);
-          
-          // Par défaut, sélectionner tous les clients
-          setSelectedClients(uniqueClientsList);
-        }
-        
-        setHasPreview(true);
-      } else {
-        setError('Format de données invalide');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erreur lors de la génération du rapport');
-      console.error(err);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Erreur lors de la prévisualisation:', err);
     }
-  };
+  }, [startDate, endDate, selectedClients, previewMutation]);
+
+  const handleDownloadReport = useCallback(async () => {
+    if (!startDate || !endDate) return;
+    
+    try {
+      await downloadMutation.mutateAsync({
+        from_date: startDate.format('YYYY-MM-DD'),
+        to_date: endDate.format('YYYY-MM-DD'),
+        client_filter: selectedClients
+      });
+    } catch (err) {
+      console.error('Erreur lors du téléchargement:', err);
+    }
+  }, [startDate, endDate, selectedClients, downloadMutation]);
+
+  // Handlers pour les changements de dates avec reset automatique
+  const handleStartDateChange = useCallback((newValue: Dayjs | null) => {
+    setStartDate(newValue);
+    setHasPreview(false);
+  }, []);
+
+  const handleEndDateChange = useCallback((newValue: Dayjs | null) => {
+    setEndDate(newValue);
+    setHasPreview(false);
+  }, []);
+
+  // Handlers pour les shortcuts de dates
+  const handleDateShortcut = useCallback((start: Dayjs, end: Dayjs) => {
+    setStartDate(start);
+    setEndDate(end);
+    setHasPreview(false);
+  }, []);
+
+  // Reset des données
+  const handleReset = useCallback(() => {
+    setHasPreview(false);
+  }, []);
+
+  // Gestion des erreurs
+  const currentError = error || previewError || clientsError;
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -250,31 +242,20 @@ export default function ReportGenerator() {
               <DatePicker
                 label="Date de début"
                 value={startDate}
-                onChange={(newValue) => {
-                  setStartDate(newValue);
-                  setHasPreview(false);
-                }}
+                onChange={handleStartDateChange}
               />
               
               <DatePicker
                 label="Date de fin"
                 value={endDate}
-                onChange={(newValue) => {
-                  setEndDate(newValue);
-                  setHasPreview(false);
-                }}
+                onChange={handleEndDateChange}
               />
               
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
                 <Button 
                   size="small" 
                   variant="outlined" 
-                  onClick={() => {
-                    const now = dayjs();
-                    setStartDate(now.startOf('month'));
-                    setEndDate(now.endOf('month'));
-                    setHasPreview(false);
-                  }}
+                  onClick={() => handleDateShortcut(dayjs().startOf('month'), dayjs().endOf('month'))}
                 >
                   Ce mois-ci
                 </Button>
@@ -282,12 +263,7 @@ export default function ReportGenerator() {
                 <Button 
                   size="small" 
                   variant="outlined" 
-                  onClick={() => {
-                    const lastMonth = dayjs().subtract(1, 'month');
-                    setStartDate(lastMonth.startOf('month'));
-                    setEndDate(lastMonth.endOf('month'));
-                    setHasPreview(false);
-                  }}
+                  onClick={() => handleDateShortcut(dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month'))}
                 >
                   Mois précédent
                 </Button>
@@ -295,12 +271,7 @@ export default function ReportGenerator() {
                 <Button 
                   size="small" 
                   variant="outlined" 
-                  onClick={() => {
-                    const now = dayjs();
-                    setStartDate(now.startOf('year'));
-                    setEndDate(now.endOf('year'));
-                    setHasPreview(false);
-                  }}
+                  onClick={() => handleDateShortcut(dayjs().startOf('year'), dayjs().endOf('year'))}
                 >
                   Cette année
                 </Button>
@@ -308,12 +279,7 @@ export default function ReportGenerator() {
                 <Button 
                   size="small" 
                   variant="outlined" 
-                  onClick={() => {
-                    const lastYear = dayjs().subtract(1, 'year');
-                    setStartDate(lastYear.startOf('year'));
-                    setEndDate(lastYear.endOf('year'));
-                    setHasPreview(false);
-                  }}
+                  onClick={() => handleDateShortcut(dayjs().subtract(1, 'year').startOf('year'), dayjs().subtract(1, 'year').endOf('year'))}
                 >
                   Année dernière
                 </Button>
@@ -388,33 +354,32 @@ export default function ReportGenerator() {
           </CardContent>
         </Card>
 
-        {error && (
-          <Alert severity="error">{error}</Alert>
+        {currentError && (
+          <Alert severity="error">
+            {currentError instanceof Error ? currentError.message : 'Une erreur est survenue'}
+          </Alert>
         )}
 
         {!hasPreview ? (
           <Button
             variant="contained"
-            onClick={() => generateReport(false)}
-            disabled={loading || !startDate || !endDate}
+            onClick={handlePreviewReport}
+            disabled={isLoading || !startDate || !endDate || selectedClients.length === 0}
           >
-            {loading ? <CircularProgress size={24} /> : 'Prévisualiser le rapport'}
+            {isLoading ? <CircularProgress size={24} /> : 'Prévisualiser le rapport'}
           </Button>
         ) : (
           <Stack direction="row" spacing={2}>
             <Button
               variant="contained"
-              onClick={() => generateReport(true)}
-              disabled={loading}
+              onClick={handleDownloadReport}
+              disabled={isLoading}
             >
-              {loading ? <CircularProgress size={24} /> : 'Télécharger le rapport'}
+              {isLoading ? <CircularProgress size={24} /> : 'Télécharger le rapport'}
             </Button>
             <Button
               variant="outlined"
-              onClick={() => {
-                setHasPreview(false);
-                setPreviewData(null);
-              }}
+              onClick={handleReset}
             >
               Réinitialiser
             </Button>
@@ -424,7 +389,6 @@ export default function ReportGenerator() {
         {previewData && previewData.length > 0 && (
           <>
             <ReportStats 
-              key={statsKey} // Utiliser la clé pour forcer le re-rendu
               data={filteredPreviewData || []} 
               getClientRate={getClientRate} 
             />
@@ -475,7 +439,7 @@ export default function ReportGenerator() {
                     fontWeight: 'bold'
                   }}>
                     <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{calculateTotalDuration(filteredPreviewData || [])}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{totalDuration}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableBody>
