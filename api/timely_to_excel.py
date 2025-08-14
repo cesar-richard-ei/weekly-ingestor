@@ -20,6 +20,7 @@ API_BASE_URL = "http://localhost:8000"
 # Initialisation des jours fériés français
 fr_holidays = holidays.FR()
 
+
 class TimelyReport:
     """Gestionnaire de rapports Timely"""
 
@@ -57,9 +58,12 @@ class TimelyReport:
     ) -> List[Dict]:
         """Filtre les événements pour ne garder que ceux du client spécifié"""
         return [
-            event for event in events
-            if (event.get("project", {}).get("client", {}).get("name", "") 
-                == client_name)
+            event
+            for event in events
+            if (
+                event.get("project", {}).get("client", {}).get("name", "")
+                == client_name
+            )
         ]
 
     @staticmethod
@@ -103,13 +107,13 @@ class TimelyReport:
                 project = event.get("project", {})
                 project_name = project.get("name", "")
                 client_name = project.get("client", {}).get("name", "")
-                
+
                 if date not in events_by_date:
                     events_by_date[date] = {}
-                
+
                 if client_name not in events_by_date[date]:
                     events_by_date[date][client_name] = []
-                
+
                 # Pas de préfixe pour Management
                 if project_name == "Management":
                     prefix = f"[{client_name}]"
@@ -117,7 +121,7 @@ class TimelyReport:
                 else:
                     prefix = f"[{client_name}]"
                     note = f"[{project_name}] {event.get('note', '')}"
-                
+
                 events_by_date[date][client_name].append((prefix, note))
 
         # Convertir en format final
@@ -131,8 +135,7 @@ class TimelyReport:
         return data_by_date
 
     def generate_excel(
-        self, data_by_date: Dict[datetime, List[Tuple[str, str]]], 
-        output_path: str
+        self, data_by_date: Dict[datetime, List[Tuple[str, str]]], output_path: str
     ):
         """Génère le fichier Excel à partir des données traitées"""
         workbook = openpyxl.Workbook()
@@ -157,10 +160,15 @@ class TimelyReport:
                     # Vérifier si c'est un jour OFF pour ce client
                     all_off = all(note.strip() == "OFF" for note in client_entries)
                     has_off = any(note.strip() == "OFF" for note in client_entries)
-                    
+
                     self._write_row(
-                        sheet, row_index, date, client_entries, client, 
-                        all_off=all_off, has_off=has_off
+                        sheet,
+                        row_index,
+                        date,
+                        client_entries,
+                        client,
+                        all_off=all_off,
+                        has_off=has_off,
                     )
                     row_index += 1
             else:
@@ -171,8 +179,14 @@ class TimelyReport:
         workbook.save(output_path)
 
     def _write_row(
-        self, sheet, row: int, date: datetime, entries: List[Union[str, Tuple[str, str]]], 
-        client: str, all_off: bool = False, has_off: bool = False
+        self,
+        sheet,
+        row: int,
+        date: datetime,
+        entries: List[Union[str, Tuple[str, str]]],
+        client: str,
+        all_off: bool = False,
+        has_off: bool = False,
     ):
         """Écrit une ligne dans le fichier Excel"""
         # Remplir les cellules
@@ -189,7 +203,7 @@ class TimelyReport:
         sheet.cell(row=row, column=2, value=time)
         sheet.cell(row=row, column=3, value=client)
         sheet.cell(row=row, column=4, value=location)
-        
+
         # Traiter les notes en fonction de leur type
         notes = []
         for entry in entries:
@@ -198,7 +212,7 @@ class TimelyReport:
                 notes.append(note)
             else:
                 notes.append(entry)
-                
+
         sheet.cell(row=row, column=5, value="\n\n".join(notes))
 
 

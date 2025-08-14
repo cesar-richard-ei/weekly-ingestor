@@ -91,13 +91,15 @@ class TimelyClient:
 
             if response.status_code == 200:
                 clients = response.json()
-                return [client for client in clients if client.get("external_id") is None]
+                return [
+                    client for client in clients if client.get("external_id") is None
+                ]
             else:
                 raise HTTPException(
                     status_code=response.status_code,
                     detail=f"Échec de la récupération des clients: {response.text}",
                 )
-                
+
     async def get_events(
         self, account_id: str, since: str, upto: str, page: int = 1
     ) -> List[Dict]:
@@ -171,89 +173,94 @@ async def analyze_data(request: DataAnalysisRequest):
     """Analyse intelligente des données pour détecter anomalies et incohérences"""
     try:
         report = TimelyReport(TIMELY_ACCOUNT_ID, API_URL)
-        
+
         # Récupérer tous les événements
         events = await report.get_events(request.from_date, request.to_date)
-        
+
         # Filtrer pour ne garder que les événements des clients spécifiés
         filtered_events = (
             [
-                e for e in events 
-                if (e.get("project", {}).get("client", {}).get("name", "") 
-                    in request.client_filter)
+                e
+                for e in events
+                if (
+                    e.get("project", {}).get("client", {}).get("name", "")
+                    in request.client_filter
+                )
             ]
             if request.client_filter
             else events
         )
-        
+
         # Traiter les événements filtrés
-        data = report.process_events(filtered_events, request.from_date, request.to_date)
-        
+        data = report.process_events(
+            filtered_events, request.from_date, request.to_date
+        )
+
         # Analyser les données
-        analysis_result = analyze_data_intelligence(data, request.from_date, request.to_date)
-        
+        analysis_result = analyze_data_intelligence(
+            data, request.from_date, request.to_date
+        )
+
         return analysis_result
-        
+
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de l'analyse des données: {str(e)}"
+            status_code=500, detail=f"Erreur lors de l'analyse des données: {str(e)}"
         )
 
 
-def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_date: str) -> Dict[str, Any]:
+def analyze_data_intelligence(
+    data: Dict[datetime, List], from_date: str, to_date: str
+) -> Dict[str, Any]:
     """Algorithme d'intelligence des données pour détecter anomalies et incohérences"""
-    
+
     # === ANALYSE STATISTIQUE DES PATTERNS ===
-    
+
     # Calculer les heures par jour (tous clients confondus)
     daily_hours = []
     daily_work_data = {}
-    
+
     for date, entries in data.items():
         if not entries:
             daily_hours.append(0)
             daily_work_data[date] = {"total_hours": 0, "clients": {}}
             continue
-            
+
         # Analyser les entrées par client pour ce jour
         day_total_hours = 0
         day_clients = {}
-        
+
         if isinstance(entries[0], tuple):
             # Grouper par client
             entries_by_client = defaultdict(list)
             for prefix, note in entries:
                 client = prefix.strip("[]") if prefix else ""
                 entries_by_client[client].append(note)
-            
+
             # Calculer les heures par client
             for client, client_entries in entries_by_client.items():
                 # Vérifier si c'est un jour OFF pour ce client
                 all_off = all(note.strip() == "OFF" for note in client_entries)
                 has_off = any(note.strip() == "OFF" for note in client_entries)
-                
+
                 if all_off:
                     client_hours = 0
                 elif has_off:
                     client_hours = 0.5
                 else:
                     client_hours = 1
-                
+
                 day_clients[client] = {
                     "hours": client_hours,
                     "notes": client_entries,
                     "all_off": all_off,
-                    "has_off": has_off
+                    "has_off": has_off,
                 }
                 day_total_hours += client_hours
-        
+
         daily_hours.append(day_total_hours)
-        daily_work_data[date] = {
-            "total_hours": day_total_hours,
-            "clients": day_clients
-        }
-    
+        daily_work_data[date] = {"total_hours": day_total_hours, "clients": day_clients}
+
     # Statistiques de base
     work_days = [h for h in daily_hours if h > 0]
     if work_days:
@@ -262,87 +269,95 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
     else:
         avg_hours_per_day = 0
         std_hours_per_day = 0
-    
+
     # === DÉTECTION D'ANOMALIES ===
-    
+
     anomalies = []
     incoherences = []
     gaps = []
-    
+
     # 1. Détection d'heures impossibles
     for date, day_data in daily_work_data.items():
         total_hours = day_data["total_hours"]
-        
+
         if total_hours > 24:
-            anomalies.append({
-                "type": "heures_impossibles",
-                "severity": "error",
-                "date": date.strftime("%d/%m/%Y"),
-                "message": f"Jour avec {total_hours}h totales (impossible > 24h)",
-                "details": {
-                    "heures_totales": total_hours,
-                    "clients": day_data["clients"]
+            anomalies.append(
+                {
+                    "type": "heures_impossibles",
+                    "severity": "error",
+                    "date": date.strftime("%d/%m/%Y"),
+                    "message": f"Jour avec {total_hours}h totales (impossible > 24h)",
+                    "details": {
+                        "heures_totales": total_hours,
+                        "clients": day_data["clients"],
+                    },
                 }
-            })
-        
+            )
+
         elif total_hours < 0:
-            anomalies.append({
-                "type": "heures_negatives",
-                "severity": "error",
-                "date": date.strftime("%d/%m/%Y"),
-                "message": f"Jour avec {total_hours}h totales (impossible < 0h)",
-                "details": {
-                    "heures_totales": total_hours,
-                    "clients": day_data["clients"]
+            anomalies.append(
+                {
+                    "type": "heures_negatives",
+                    "severity": "error",
+                    "date": date.strftime("%d/%m/%Y"),
+                    "message": f"Jour avec {total_hours}h totales (impossible < 0h)",
+                    "details": {
+                        "heures_totales": total_hours,
+                        "clients": day_data["clients"],
+                    },
                 }
-            })
-    
+            )
+
     # 2. Détection de jours suspects (basé sur les statistiques)
     if std_hours_per_day > 0:
         lower_threshold = avg_hours_per_day - (2 * std_hours_per_day)
         upper_threshold = avg_hours_per_day + (2 * std_hours_per_day)
-        
+
         for date, day_data in daily_work_data.items():
             total_hours = day_data["total_hours"]
-            
+
             if total_hours > 0:  # Ignorer les jours vides
                 if total_hours < lower_threshold:
-                    anomalies.append({
-                        "type": "sous_activite",
-                        "severity": "warning",
-                        "date": date.strftime("%d/%m/%Y"),
-                        "message": f"Jour avec {total_hours}h vs moyenne {avg_hours_per_day:.1f}h",
-                        "details": {
-                            "heures": total_hours,
-                            "moyenne": avg_hours_per_day,
-                            "seuil_bas": lower_threshold,
-                            "ecart": f"{((total_hours - avg_hours_per_day) / avg_hours_per_day * 100):.0f}%"
+                    anomalies.append(
+                        {
+                            "type": "sous_activite",
+                            "severity": "warning",
+                            "date": date.strftime("%d/%m/%Y"),
+                            "message": f"Jour avec {total_hours}h vs moyenne {avg_hours_per_day:.1f}h",
+                            "details": {
+                                "heures": total_hours,
+                                "moyenne": avg_hours_per_day,
+                                "seuil_bas": lower_threshold,
+                                "ecart": f"{((total_hours - avg_hours_per_day) / avg_hours_per_day * 100):.0f}%",
+                            },
                         }
-                    })
-                
+                    )
+
                 elif total_hours > upper_threshold:
-                    anomalies.append({
-                        "type": "sur_activite",
-                        "severity": "info",
-                        "date": date.strftime("%d/%m/%Y"),
-                        "message": f"Jour avec {total_hours}h vs moyenne {avg_hours_per_day:.1f}h",
-                        "details": {
-                            "heures": total_hours,
-                            "moyenne": avg_hours_per_day,
-                            "seuil_haut": upper_threshold,
-                            "ecart": f"{((total_hours - avg_hours_per_day) / avg_hours_per_day * 100):.0f}%"
+                    anomalies.append(
+                        {
+                            "type": "sur_activite",
+                            "severity": "info",
+                            "date": date.strftime("%d/%m/%Y"),
+                            "message": f"Jour avec {total_hours}h vs moyenne {avg_hours_per_day:.1f}h",
+                            "details": {
+                                "heures": total_hours,
+                                "moyenne": avg_hours_per_day,
+                                "seuil_haut": upper_threshold,
+                                "ecart": f"{((total_hours - avg_hours_per_day) / avg_hours_per_day * 100):.0f}%",
+                            },
                         }
-                    })
-    
+                    )
+
     # 3. Détection de jours complètement vides (tous clients à 0h)
     from datetime import date as date_today
-    
+
     for date, day_data in daily_work_data.items():
         if day_data["total_hours"] == 0:
             # Ignorer les jours dans le futur
             if date.date() > date_today.today():
                 continue
-                
+
             # Vérifier si c'est un weekend ou jour férié
             if date.weekday() >= 5:  # Weekend
                 continue
@@ -351,47 +366,51 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
             else:
                 # Vérifier si c'est un jour OFF déclaré ou vraiment vide
                 has_off_clients = any(
-                    client_data.get("all_off", False) 
+                    client_data.get("all_off", False)
                     for client_data in day_data["clients"].values()
                 )
-                
+
                 if has_off_clients:
                     # Jour OFF déclaré - normal
                     continue
                 elif len(day_data["clients"]) == 0:
                     # Vraiment aucun client - suspect
-                    anomalies.append({
-                        "type": "jour_vide",
-                        "severity": "warning",
-                        "date": date.strftime("%d/%m/%Y"),
-                        "message": "Jour de semaine sans aucune donnée client",
-                        "details": {
-                            "type_jour": "semaine",
-                            "clients": day_data["clients"],
-                            "raison": "Aucun client configuré pour cette date"
-                        }
-                    })
-                else:
-                    # Clients configurés mais tous à 0h - vérifier si c'est normal
-                    all_clients_off = all(
-                        client_data.get("all_off", False) 
-                        for client_data in day_data["clients"].values()
-                    )
-                    
-                    if not all_clients_off:
-                        # Certains clients devraient avoir des heures
-                        anomalies.append({
-                            "type": "jour_suspect",
-                            "severity": "info",
+                    anomalies.append(
+                        {
+                            "type": "jour_vide",
+                            "severity": "warning",
                             "date": date.strftime("%d/%m/%Y"),
-                            "message": "Jour avec clients configurés mais 0h totales",
+                            "message": "Jour de semaine sans aucune donnée client",
                             "details": {
                                 "type_jour": "semaine",
                                 "clients": day_data["clients"],
-                                "raison": "Vérifier si c'est normal ou oubli de saisie"
+                                "raison": "Aucun client configuré pour cette date",
+                            },
+                        }
+                    )
+                else:
+                    # Clients configurés mais tous à 0h - vérifier si c'est normal
+                    all_clients_off = all(
+                        client_data.get("all_off", False)
+                        for client_data in day_data["clients"].values()
+                    )
+
+                    if not all_clients_off:
+                        # Certains clients devraient avoir des heures
+                        anomalies.append(
+                            {
+                                "type": "jour_suspect",
+                                "severity": "info",
+                                "date": date.strftime("%d/%m/%Y"),
+                                "message": "Jour avec clients configurés mais 0h totales",
+                                "details": {
+                                    "type_jour": "semaine",
+                                    "clients": day_data["clients"],
+                                    "raison": "Vérifier si c'est normal ou oubli de saisie",
+                                },
                             }
-                        })
-    
+                        )
+
     # 4. Détection de gaps temporels (périodes sans données)
     dates_list = sorted(data.keys())
     if len(dates_list) > 1:
@@ -399,59 +418,61 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
             current_date = dates_list[i]
             next_date = dates_list[i + 1]
             expected_next = current_date + timedelta(days=1)
-            
+
             if next_date != expected_next:
                 gap_days = (next_date - current_date).days - 1
                 if gap_days > 0:
-                    gaps.append({
-                        "debut": current_date.strftime("%d/%m/%Y"),
-                        "fin": next_date.strftime("%d/%m/%Y"),
-                        "duree": gap_days,
-                        "message": f"{gap_days} jour(s) sans données entre {current_date.strftime('%d/%m/%Y')} et {next_date.strftime('%d/%m/%Y')}"
-                    })
-    
+                    gaps.append(
+                        {
+                            "debut": current_date.strftime("%d/%m/%Y"),
+                            "fin": next_date.strftime("%d/%m/%Y"),
+                            "duree": gap_days,
+                            "message": f"{gap_days} jour(s) sans données entre {current_date.strftime('%d/%m/%Y')} et {next_date.strftime('%d/%m/%Y')}",
+                        }
+                    )
+
     # 5. Détection d'incohérences logiques
     for date, day_data in daily_work_data.items():
         for client, client_data in day_data["clients"].items():
             # Vérifier la cohérence des notes
             notes = client_data["notes"]
             hours = client_data["hours"]
-            
+
             # Si OFF mais avec des notes détaillées
             if client_data["all_off"] and any(len(note.strip()) > 3 for note in notes):
-                incoherences.append({
-                    "type": "off_avec_notes",
-                    "date": date.strftime("%d/%m/%Y"),
-                    "client": client,
-                    "message": f"Client {client} déclaré OFF mais avec notes détaillées",
-                    "details": {
-                        "heures": hours,
-                        "notes": notes
+                incoherences.append(
+                    {
+                        "type": "off_avec_notes",
+                        "date": date.strftime("%d/%m/%Y"),
+                        "client": client,
+                        "message": f"Client {client} déclaré OFF mais avec notes détaillées",
+                        "details": {"heures": hours, "notes": notes},
                     }
-                })
-            
+                )
+
             # Si demi-journée mais pas de note OFF
-            elif client_data["has_off"] and not any(note.strip() == "OFF" for note in notes):
-                incoherences.append({
-                    "type": "demi_journee_sans_off",
-                    "date": date.strftime("%d/%m/%Y"),
-                    "client": client,
-                    "message": f"Client {client} en demi-journée mais pas de note OFF",
-                    "details": {
-                        "heures": hours,
-                        "notes": notes
+            elif client_data["has_off"] and not any(
+                note.strip() == "OFF" for note in notes
+            ):
+                incoherences.append(
+                    {
+                        "type": "demi_journee_sans_off",
+                        "date": date.strftime("%d/%m/%Y"),
+                        "client": client,
+                        "message": f"Client {client} en demi-journée mais pas de note OFF",
+                        "details": {"heures": hours, "notes": notes},
                     }
-                })
-    
+                )
+
     # === STATISTIQUES ET PATTERNS ===
-    
+
     # Pattern hebdomadaire
     weekly_pattern = defaultdict(list)
     for date, day_data in daily_work_data.items():
         if day_data["total_hours"] > 0:
             weekday = date.strftime("%A")
             weekly_pattern[weekday].append(day_data["total_hours"])
-    
+
     weekly_stats = {}
     for day, hours_list in weekly_pattern.items():
         if hours_list:
@@ -459,33 +480,29 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
                 "moyenne": statistics.mean(hours_list),
                 "min": min(hours_list),
                 "max": max(hours_list),
-                "nb_jours": len(hours_list)
+                "nb_jours": len(hours_list),
             }
-    
+
     # Résumé des métriques
     summary = {
-        "periode": {
-            "debut": from_date,
-            "fin": to_date,
-            "nb_jours": len(daily_hours)
-        },
+        "periode": {"debut": from_date, "fin": to_date, "nb_jours": len(daily_hours)},
         "activite": {
             "jours_avec_activite": len(work_days),
             "jours_vides": daily_hours.count(0),
             "moyenne_heures_jour": round(avg_hours_per_day, 1),
             "ecart_type": round(std_hours_per_day, 1),
-            "total_heures": sum(daily_hours)
+            "total_heures": sum(daily_hours),
         },
         "anomalies": {
             "total": len(anomalies),
             "par_severite": {
                 "error": len([a for a in anomalies if a["severity"] == "error"]),
                 "warning": len([a for a in anomalies if a["severity"] == "warning"]),
-                "info": len([a for a in anomalies if a["severity"] == "info"])
-            }
-        }
+                "info": len([a for a in anomalies if a["severity"] == "info"]),
+            },
+        },
     }
-    
+
     return {
         "summary": summary,
         "anomalies": anomalies,
@@ -497,10 +514,18 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
                 "moyenne": avg_hours_per_day,
                 "ecart_type": std_hours_per_day,
                 "seuils": {
-                    "bas": round(avg_hours_per_day - (2 * std_hours_per_day), 1) if std_hours_per_day > 0 else 0,
-                    "haut": round(avg_hours_per_day + (2 * std_hours_per_day), 1) if std_hours_per_day > 0 else 0
-                }
-            }
+                    "bas": (
+                        round(avg_hours_per_day - (2 * std_hours_per_day), 1)
+                        if std_hours_per_day > 0
+                        else 0
+                    ),
+                    "haut": (
+                        round(avg_hours_per_day + (2 * std_hours_per_day), 1)
+                        if std_hours_per_day > 0
+                        else 0
+                    ),
+                },
+            },
         },
         "donnees_jour": {
             date.strftime("%d/%m/%Y"): {
@@ -508,13 +533,13 @@ def analyze_data_intelligence(data: Dict[datetime, List], from_date: str, to_dat
                 "clients": {
                     client: {
                         "hours": client_data["hours"],
-                        "notes": client_data["notes"]
+                        "notes": client_data["notes"],
                     }
                     for client, client_data in day_data["clients"].items()
-                }
+                },
             }
             for date, day_data in daily_work_data.items()
-        }
+        },
     }
 
 
@@ -528,36 +553,45 @@ async def generate_report(request: ReportRequest):
         # Filtrer pour ne garder que les événements des clients spécifiés
         filtered_events = (
             [
-                e for e in events 
-                if (e.get("project", {}).get("client", {}).get("name", "") 
-                    in request.client_filter)
+                e
+                for e in events
+                if (
+                    e.get("project", {}).get("client", {}).get("name", "")
+                    in request.client_filter
+                )
             ]
             if request.client_filter
             else events
         )
         # Traiter les événements filtrés
-        data = report.process_events(filtered_events, request.from_date, request.to_date)
+        data = report.process_events(
+            filtered_events, request.from_date, request.to_date
+        )
 
         if request.format == "json":
             # Transformer les données au format attendu par le frontend
             formatted_data = []
             for date, entries in sorted(data.items()):
                 if not entries:
-                    formatted_data.append({
-                        "date": date.strftime("%d/%m/%Y"),
-                        "client": "",
-                        "duration": "0",
-                        "description": "",
-                        "type": "empty"
-                    })
+                    formatted_data.append(
+                        {
+                            "date": date.strftime("%d/%m/%Y"),
+                            "client": "",
+                            "duration": "0",
+                            "description": "",
+                            "type": "empty",
+                        }
+                    )
                 elif entries[0][1] in ["WEEKEND", "HOLIDAY"]:
-                    formatted_data.append({
-                        "date": date.strftime("%d/%m/%Y"),
-                        "client": "",
-                        "duration": "0",
-                        "description": entries[0][1],
-                        "type": entries[0][1].lower()
-                    })
+                    formatted_data.append(
+                        {
+                            "date": date.strftime("%d/%m/%Y"),
+                            "client": "",
+                            "duration": "0",
+                            "description": entries[0][1],
+                            "type": entries[0][1].lower(),
+                        }
+                    )
                 else:
                     # Grouper les entrées par client
                     entries_by_client = {}
@@ -586,13 +620,17 @@ async def generate_report(request: ReportRequest):
                             clients.append(client)
                             descriptions.append("\n\n".join(client_entries))
 
-                    formatted_data.append({
-                        "date": date.strftime("%d/%m/%Y"),
-                        "client": " + ".join(clients),
-                        "duration": total_duration,
-                        "description": separator.join(descriptions),
-                        "type": "off" if all_off else "half_off" if has_off else "work"
-                    })
+                    formatted_data.append(
+                        {
+                            "date": date.strftime("%d/%m/%Y"),
+                            "client": " + ".join(clients),
+                            "duration": total_duration,
+                            "description": separator.join(descriptions),
+                            "type": (
+                                "off" if all_off else "half_off" if has_off else "work"
+                            ),
+                        }
+                    )
             return JSONResponse(content=formatted_data)
 
         output = BytesIO()
@@ -605,12 +643,11 @@ async def generate_report(request: ReportRequest):
             headers={
                 "Content-Disposition": f"attachment; filename=imputations_"
                 f"{request.from_date[5:7].lower()}_{request.from_date[2:4]}.xlsx"
-            }
+            },
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la génération du rapport: {str(e)}"
+            status_code=500, detail=f"Erreur lors de la génération du rapport: {str(e)}"
         )
 
 
@@ -625,6 +662,7 @@ class LLMAnalysisRequest(BaseModel):
     client_filter: Optional[List[str]] = None
     analysis_data: dict  # Résultat de l'analyse existante
 
+
 class LLMInsight(BaseModel):
     category: str
     title: str
@@ -632,6 +670,7 @@ class LLMInsight(BaseModel):
     impact: str  # "high", "medium", "low"
     recommendation: str
     confidence: float  # 0.0 à 1.0
+
 
 class LLMAnalysisResponse(BaseModel):
     summary: str
@@ -649,28 +688,30 @@ async def analyze_with_llm(request: LLMAnalysisRequest):
     try:
         # Préparer le prompt pour Ollama
         prompt = prepare_llm_prompt(request.analysis_data)
-        
+
         # Appeler Ollama
         llm_response = await call_ollama(prompt)
-        
+
         # Parser et structurer la réponse
         structured_response = parse_llm_response(llm_response)
-        
+
         return structured_response
-        
+
     except Exception as e:
         raise HTTPException(
-            status_code=500, 
-            detail=f"Erreur lors de l'analyse LLM: {str(e)}"
+            status_code=500, detail=f"Erreur lors de l'analyse LLM: {str(e)}"
         )
+
 
 def prepare_llm_prompt(analysis_data: dict) -> str:
     """
     Prépare un prompt structuré pour l'analyse LLM focalisée sur la cohérence facturation
     """
     # Debug des données d'entrée
-    print(f"DEBUG - analysis_data reçu: {json.dumps(analysis_data, indent=2)[:1000]}...")
-    
+    print(
+        f"DEBUG - analysis_data reçu: {json.dumps(analysis_data, indent=2)[:1000]}..."
+    )
+
     prompt = f"""
 Tu es un expert en audit de facturation freelance. Analyse la COHÉRENCE ET CRÉDIBILITÉ des imputations.
 
@@ -734,31 +775,29 @@ STOP après le JSON. Pas de commentaires.
 """
     return prompt
 
+
 async def call_ollama(prompt: str) -> str:
     """
     Appelle Ollama sur la machine distante
     """
     ollama_url = "http://192.168.1.63:11434/api/generate"
-    
+
     payload = {
         "model": "mistral:7b",
         "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": 0.3,
-            "top_p": 0.9,
-            "max_tokens": 8000
-        }
+        "options": {"temperature": 0.3, "top_p": 0.9, "max_tokens": 8000},
     }
-    
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(ollama_url, json=payload)
-        
+
         if response.status_code != 200:
             raise Exception(f"Erreur Ollama: {response.status_code}")
-        
+
         result = response.json()
         return result.get("response", "")
+
 
 def parse_llm_response(llm_response: str) -> LLMAnalysisResponse:
     """
@@ -767,27 +806,27 @@ def parse_llm_response(llm_response: str) -> LLMAnalysisResponse:
     try:
         # Debug: afficher la réponse brute
         print(f"DEBUG - Réponse LLM brute: {llm_response}")
-        
+
         # Nettoyer la réponse (enlever markdown si présent)
         clean_response = llm_response.strip()
         if clean_response.startswith("```json"):
             clean_response = clean_response[7:]
         if clean_response.endswith("```"):
             clean_response = clean_response[:-3]
-        
+
         # Extraire SEULEMENT le JSON (tout ce qui est entre { et })
-        start_idx = clean_response.find('{')
-        end_idx = clean_response.rfind('}') + 1
-        
+        start_idx = clean_response.find("{")
+        end_idx = clean_response.rfind("}") + 1
+
         if start_idx == -1 or end_idx == 0:
             raise Exception("Aucun JSON trouvé dans la réponse")
-        
+
         json_only = clean_response[start_idx:end_idx]
         print(f"DEBUG - JSON extrait: {json_only}")
-        
+
         # Parser le JSON
         parsed = json.loads(json_only)
-        
+
         # Valider et structurer
         insights = []
         for insight_data in parsed.get("insights", []):
@@ -797,18 +836,18 @@ def parse_llm_response(llm_response: str) -> LLMAnalysisResponse:
                 description=insight_data.get("description", ""),
                 impact=insight_data.get("impact", "medium"),
                 recommendation=insight_data.get("recommendation", ""),
-                confidence=insight_data.get("confidence", 0.5)
+                confidence=insight_data.get("confidence", 0.5),
             )
             insights.append(insight)
-        
+
         return LLMAnalysisResponse(
             summary=parsed.get("summary", "Analyse LLM terminée"),
             insights=insights,
             business_recommendations=parsed.get("business_recommendations", []),
             coherence_score=parsed.get("coherence_score", 0.0),
-            risk_alerts=parsed.get("risk_alerts", [])
+            risk_alerts=parsed.get("risk_alerts", []),
         )
-        
+
     except json.JSONDecodeError as e:
         # Fallback si le parsing JSON échoue
         return LLMAnalysisResponse(
@@ -816,7 +855,7 @@ def parse_llm_response(llm_response: str) -> LLMAnalysisResponse:
             insights=[],
             business_recommendations=["Vérifier la réponse LLM"],
             coherence_score=0.0,
-            risk_alerts=["Erreur de parsing", e.msg]
+            risk_alerts=["Erreur de parsing", e.msg],
         )
     except Exception as e:
         raise Exception(f"Erreur lors du parsing de la réponse LLM: {str(e)}")
