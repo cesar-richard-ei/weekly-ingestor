@@ -1,305 +1,346 @@
-import { 
-  Box, 
-  Card, 
-  CardContent, 
-  Typography, 
-  Grid, 
-  Chip, 
-  Stack, 
-  Divider,
-  useTheme,
+import React from 'react';
+import {
+  Card,
+  CardContent,
+  Typography,
+  Grid,
+  Chip,
+  Stack,
   LinearProgress,
   Alert,
   Paper,
-  IconButton,
-  Tooltip
+  Box,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
-import { 
+import {
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  Lightbulb as LightbulbIcon,
   Warning as WarningIcon,
-  CheckCircle as CheckIcon,
-  Business as BusinessIcon,
-  Psychology as PsychologyIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Info as InfoIcon,
+  ExpandMore as ExpandMoreIcon,
+  Schedule as ScheduleIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material';
-import { 
-  LLMInsight, 
-  LLMAnalysisResponse 
-} from '../hooks/useReportGeneration';
+
+interface LLMInsight {
+  category: string;
+  title: string;
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+  recommendation: string;
+  confidence: number;
+}
+
+interface LLMData {
+  summary: string;
+  insights: LLMInsight[];
+  business_recommendations: string[];
+  coherence_score: number;
+  risk_alerts: string[];
+}
 
 interface LLMInsightsProps {
-  llmData: LLMAnalysisResponse;
+  llmData: LLMData | null;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const IMPACT_COLORS = {
-  high: '#f44336',
-  medium: '#ff9800',
-  low: '#4caf50'
-};
+  high: 'error',
+  medium: 'warning',
+  low: 'info'
+} as const;
 
-const IMPACT_ICONS = {
-  high: <WarningIcon />,
-  medium: <TrendingDownIcon />,
-  low: <CheckIcon />
-};
+const IMPACT_LABELS = {
+  high: 'Critique',
+  medium: 'Important',
+  low: 'Info'
+} as const;
 
 const CATEGORY_LABELS = {
   facturation: 'Facturation',
   coherence: 'Cohérence',
-  risk: 'Risque',
   validation: 'Validation',
-  general: 'Général'
+  risk: 'Risque'
 };
 
 const CATEGORY_COLORS = {
-  facturation: '#2196F3',
-  coherence: '#4CAF50',
-  risk: '#F44336',
-  validation: '#FF9800',
-  general: '#9E9E9E'
+  facturation: 'primary',
+  coherence: 'secondary',
+  validation: 'success',
+  risk: 'error'
 };
 
-export default function LLMInsights({ llmData }: LLMInsightsProps) {
-  const theme = useTheme();
-  const { summary, insights, business_recommendations, risk_alerts } = llmData;
+const LLMInsights: React.FC<LLMInsightsProps> = ({ llmData, isLoading, error }) => {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Analyse IA en cours...
+          </Typography>
+          <LinearProgress />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error">
+        Erreur lors de l'analyse IA : {error}
+      </Alert>
+    );
+  }
+
+  if (!llmData) {
+    return null;
+  }
+
+  // Fallback pour compatibilité
+  const coherence_score = llmData.coherence_score || (llmData as any).productivity_score || 50;
   
-  // Gestion robuste du score (compatibilité avec l'ancien format)
-  const coherence_score = llmData.coherence_score || llmData.productivity_score || 50;
+  // Séparer les insights par type
+  const problematicInsights = llmData.insights.filter(insight => 
+    insight.impact === 'high' || insight.impact === 'medium'
+  );
+  
+  const infoInsights = llmData.insights.filter(insight => 
+    insight.impact === 'low'
+  );
 
-  const getImpactColor = (impact: string) => {
-    return IMPACT_COLORS[impact as keyof typeof IMPACT_COLORS] || IMPACT_COLORS.medium;
+  // Extraire les jours des titres d'insights
+  const extractDayFromTitle = (title: string) => {
+    const match = title.match(/Jour (\d+)/);
+    return match ? match[1] : null;
   };
 
-  const getImpactIcon = (impact: string) => {
-    return IMPACT_ICONS[impact as keyof typeof IMPACT_ICONS] || IMPACT_ICONS.medium;
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'error';
   };
 
-  const getCategoryLabel = (category: string) => {
-    return CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] || category;
-  };
-
-  const getCategoryColor = (category: string) => {
-    return CATEGORY_COLORS[category as keyof typeof CATEGORY_COLORS] || CATEGORY_COLORS.general;
-  };
-
-  const renderConfidenceStars = (confidence: number) => {
-    const stars = [];
-    const fullStars = Math.floor(confidence * 5);
-    const hasHalfStar = confidence * 5 % 1 >= 0.5;
-
-    for (let i = 0; i < 5; i++) {
-      if (i < fullStars) {
-        stars.push(<StarIcon key={i} sx={{ fontSize: 16, color: '#FFD700' }} />);
-      } else if (i === fullStars && hasHalfStar) {
-        stars.push(<StarBorderIcon key={i} sx={{ fontSize: 16, color: '#FFD700' }} />);
-      } else {
-        stars.push(<StarBorderIcon key={i} sx={{ fontSize: 16, color: '#E0E0E0' }} />);
-      }
-    }
-    return stars;
+  const getScoreLabel = (score: number) => {
+    if (score >= 80) return 'Excellent';
+    if (score >= 60) return 'Correct';
+    return 'Problématique';
   };
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* En-tête avec score de productivité */}
-      <Card elevation={3} sx={{ mb: 3, borderRadius: 3, background: `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.secondary.main}15)` }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h4" gutterBottom align="center" sx={{ fontWeight: 700, color: theme.palette.primary.main, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <PsychologyIcon sx={{ mr: 2, fontSize: 32 }} />
-            Audit de Facturation
-          </Typography>
-          
-          <Typography variant="h6" align="center" sx={{ mb: 3, color: 'text.secondary', fontStyle: 'italic' }}>
-            {summary}
-          </Typography>
-          
-          <Grid container spacing={3} sx={{ mt: 2 }}>
-            {/* Score de cohérence */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ textAlign: 'center', p: 3, background: '#4CAF50' + '15', height: '100%' }}>
-                <TrendingUpIcon sx={{ fontSize: 48, color: '#4CAF50', mb: 2 }} />
-                <Typography variant="h3" sx={{ fontWeight: 700, color: '#4CAF50', mb: 1 }}>
-                  {coherence_score.toFixed(0)}
+    <Stack spacing={3}>
+      {/* Dashboard rapide */}
+      <Card>
+        <CardContent>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <Box textAlign="center">
+                <Typography variant="h3" color={`${getScoreColor(coherence_score)}.main`}>
+                  {coherence_score}/100
                 </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                  Score de Cohérence
+                <Typography variant="h6" color="text.secondary">
+                  {getScoreLabel(coherence_score)}
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={coherence_score} 
-                  sx={{ 
-                    height: 12, 
-                    borderRadius: 6, 
-                    backgroundColor: '#4CAF50' + '30',
-                    '& .MuiLinearProgress-bar': {
-                      backgroundColor: coherence_score > 70 ? '#4CAF50' : 
-                                    coherence_score > 50 ? '#FF9800' : '#F44336'
-                    }
-                  }} 
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                  {coherence_score > 70 ? 'Excellent' : 
-                   coherence_score > 50 ? 'Bon' : 'À améliorer'}
+                <Typography variant="body2" color="text.secondary">
+                  Score de cohérence
                 </Typography>
-              </Card>
+              </Box>
             </Grid>
-            
-            {/* Résumé des insights */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ p: 3, height: '100%' }}>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <LightbulbIcon sx={{ mr: 1, color: '#FF9800' }} />
-                  Résumé des Insights
-                </Typography>
-                
-                <Stack spacing={2}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2">Insights détectés:</Typography>
-                    <Chip label={insights.length} color="primary" size="small" />
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2">Recommandations:</Typography>
-                    <Chip label={business_recommendations.length} color="success" size="small" />
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2">Alertes risques:</Typography>
-                    <Chip label={risk_alerts.length} color="warning" size="small" />
-                  </Box>
-                </Stack>
-              </Card>
+            <Grid item xs={12} md={8}>
+              <Typography variant="h6" gutterBottom>
+                Résumé de l'analyse
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                {llmData.summary}
+              </Typography>
             </Grid>
           </Grid>
         </CardContent>
       </Card>
 
-      <Grid container spacing={3}>
-        {/* Insights détaillés */}
-        <Grid item xs={12} lg={8}>
-          <Card elevation={2} sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <LightbulbIcon sx={{ mr: 1, color: '#FF9800' }} />
-                Insights Détaillés ({insights.length})
+      {/* Jours problématiques - PRIORITÉ 1 */}
+      {problematicInsights.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box display="flex" alignItems="center" mb={2}>
+              <WarningIcon color="error" sx={{ mr: 1 }} />
+              <Typography variant="h6" color="error">
+                Jours à corriger ({problematicInsights.length})
               </Typography>
-              
-              {insights.length > 0 ? (
-                <Stack spacing={2}>
-                  {insights.map((insight, index) => (
-                    <Paper 
-                      key={index} 
-                      elevation={1}
-                      sx={{ 
-                        borderLeft: `4px solid ${getImpactColor(insight.impact)}`,
-                        borderRadius: 2,
-                        p: 2
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          {getImpactIcon(insight.impact)}
-                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            </Box>
+            
+            <List>
+              {problematicInsights.map((insight, index) => {
+                const day = extractDayFromTitle(insight.title);
+                return (
+                  <ListItem key={index} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 1 }}>
+                    <ListItemIcon>
+                      {insight.impact === 'high' ? (
+                        <ErrorIcon color="error" />
+                      ) : (
+                        <WarningIcon color="warning" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Box display="flex" alignItems="center" gap={1}>
+                          {day && (
+                            <Chip 
+                              label={`Jour ${day}`} 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                            />
+                          )}
+                          <Typography variant="subtitle1" fontWeight="bold">
                             {insight.title}
                           </Typography>
                           <Chip 
-                            label={getCategoryLabel(insight.category)} 
-                            size="small" 
-                            sx={{ 
-                              backgroundColor: getCategoryColor(insight.category),
-                              color: 'white',
-                              fontSize: '0.75rem'
-                            }}
-                          />
-                          <Chip 
-                            label={insight.impact} 
-                            size="small" 
-                            sx={{ 
-                              backgroundColor: getImpactColor(insight.impact),
-                              color: 'white',
-                              fontSize: '0.75rem'
-                            }}
+                            label={IMPACT_LABELS[insight.impact]} 
+                            color={IMPACT_COLORS[insight.impact]} 
+                            size="small"
                           />
                         </Box>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          {renderConfidenceStars(insight.confidence)}
+                      }
+                      secondary={
+                        <Box mt={1}>
+                          <Typography variant="body2" color="text.secondary" mb={1}>
+                            {insight.description}
+                          </Typography>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <AssignmentIcon fontSize="small" color="action" />
+                            <Typography variant="body2" fontWeight="medium">
+                              {insight.recommendation}
+                            </Typography>
+                          </Box>
                         </Box>
-                      </Box>
-                      
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                        {insight.description}
-                      </Typography>
-                      
-                      <Box sx={{ p: 1.5, backgroundColor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>💡 Recommandation :</strong> {insight.recommendation}
-                        </Typography>
-                      </Box>
-                    </Paper>
-                  ))}
-                </Stack>
-              ) : (
-                <Alert severity="info" sx={{ borderRadius: 2 }}>
-                  Aucun insight généré par le LLM
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
+                      }
+                    />
+                                         <Box display="flex" gap={1}>
+                       <Chip 
+                         label={`Confiance: ${Math.round(insight.confidence * 100)}%`}
+                         size="small"
+                         variant="outlined"
+                         color="default"
+                       />
+                     </Box>
+                  </ListItem>
+                );
+              })}
+            </List>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Recommandations et alertes */}
-        <Grid item xs={12} lg={4}>
-          <Stack spacing={3}>
-            {/* Recommandations business */}
-            {business_recommendations.length > 0 && (
-              <Card elevation={2} sx={{ borderRadius: 3 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <BusinessIcon sx={{ mr: 1, color: '#4CAF50' }} />
-                    Recommandations Business
-                  </Typography>
-                  
-                  <Stack spacing={1.5}>
-                    {business_recommendations.map((rec, index) => (
-                      <Alert key={index} severity="success" sx={{ borderRadius: 1 }}>
-                        <Typography variant="body2">
-                          {rec}
-                        </Typography>
-                      </Alert>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
+      {/* Actions recommandées */}
+      {llmData.business_recommendations.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box display="flex" alignItems="center" mb={2}>
+              <TrendingUpIcon color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6">
+                Actions recommandées
+              </Typography>
+            </Box>
             
-            {/* Alertes risques */}
-            {risk_alerts.length > 0 && (
-              <Card elevation={2} sx={{ borderRadius: 3 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <WarningIcon sx={{ mr: 1, color: '#F44336' }} />
-                    Alertes Risques
-                  </Typography>
-                  
-                  <Stack spacing={1.5}>
-                    {risk_alerts.map((alert, index) => (
-                      <Alert key={index} severity="warning" sx={{ borderRadius: 1 }}>
-                        <Typography variant="body2">
-                          {alert}
-                        </Typography>
-                      </Alert>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
-          </Stack>
-        </Grid>
-      </Grid>
-    </Box>
+            <Stack spacing={2}>
+              {llmData.business_recommendations.map((rec, index) => (
+                <Paper key={index} sx={{ p: 2, bgcolor: 'primary.50' }}>
+                  <Box display="flex" alignItems="center" gap={2}>
+                    <ScheduleIcon color="primary" />
+                    <Typography variant="body1">
+                      {rec}
+                    </Typography>
+                                         <Chip 
+                       label="Action requise"
+                       size="small"
+                       color="primary"
+                       variant="outlined"
+                     />
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alertes de risque */}
+      {llmData.risk_alerts.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box display="flex" alignItems="center" mb={2}>
+              <ErrorIcon color="error" sx={{ mr: 1 }} />
+              <Typography variant="h6" color="error">
+                Alertes de risque
+              </Typography>
+            </Box>
+            
+            <Stack spacing={1}>
+              {llmData.risk_alerts.map((alert, index) => (
+                <Alert key={index} severity="error" icon={<ErrorIcon />}>
+                  {alert}
+                </Alert>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Informations complémentaires */}
+      {infoInsights.length > 0 && (
+        <Card>
+          <CardContent>
+            <Box display="flex" alignItems="center" mb={2}>
+              <InfoIcon color="info" sx={{ mr: 1 }} />
+              <Typography variant="h6">
+                Informations complémentaires
+              </Typography>
+            </Box>
+            
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>Voir les détails ({infoInsights.length})</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List>
+                  {infoInsights.map((insight, index) => (
+                    <ListItem key={index}>
+                      <ListItemIcon>
+                        <CheckCircleIcon color="info" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={insight.title}
+                        secondary={
+                          <Box>
+                            <Typography variant="body2" color="text.secondary" mb={1}>
+                              {insight.description}
+                            </Typography>
+                            <Typography variant="body2" fontWeight="medium">
+                              {insight.recommendation}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </AccordionDetails>
+            </Accordion>
+          </CardContent>
+        </Card>
+      )}
+
+      
+    </Stack>
   );
-}
+};
+
+export default LLMInsights;

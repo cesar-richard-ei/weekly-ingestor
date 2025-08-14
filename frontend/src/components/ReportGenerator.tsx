@@ -620,7 +620,11 @@ export default function ReportGenerator() {
                         </Stack>
                       </Box>
                     ) : llmData ? (
-                      <LLMInsights llmData={llmData} />
+                      <LLMInsights 
+                        llmData={llmData} 
+                        isLoading={isLoadingLLM}
+                        error={llmError?.message || null}
+                      />
                     ) : llmError ? (
                       <Alert severity="error">
                         Erreur lors de l'analyse IA: {llmError.message}
