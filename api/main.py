@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 import statistics
 from collections import defaultdict
 import holidays
+import json
 
 # Configuration
 load_dotenv()
@@ -616,3 +617,206 @@ async def generate_report(request: ReportRequest):
 @app.get("/health")
 async def health_check():
     return JSONResponse(content={"status": "OK"}, status_code=200)
+
+
+class LLMAnalysisRequest(BaseModel):
+    from_date: str
+    to_date: str
+    client_filter: Optional[List[str]] = None
+    analysis_data: dict  # Résultat de l'analyse existante
+
+class LLMInsight(BaseModel):
+    category: str
+    title: str
+    description: str
+    impact: str  # "high", "medium", "low"
+    recommendation: str
+    confidence: float  # 0.0 à 1.0
+
+class LLMAnalysisResponse(BaseModel):
+    summary: str
+    insights: List[LLMInsight]
+    business_recommendations: List[str]
+    coherence_score: float
+    risk_alerts: List[str]
+
+
+@app.post("/analyze-with-llm")
+async def analyze_with_llm(request: LLMAnalysisRequest):
+    """
+    Analyse les données d'imputation avec un LLM local (Ollama)
+    """
+    try:
+        # Préparer le prompt pour Ollama
+        prompt = prepare_llm_prompt(request.analysis_data)
+        
+        # Appeler Ollama
+        llm_response = await call_ollama(prompt)
+        
+        # Parser et structurer la réponse
+        structured_response = parse_llm_response(llm_response)
+        
+        return structured_response
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Erreur lors de l'analyse LLM: {str(e)}"
+        )
+
+def prepare_llm_prompt(analysis_data: dict) -> str:
+    """
+    Prépare un prompt structuré pour l'analyse LLM focalisée sur la cohérence facturation
+    """
+    # Debug des données d'entrée
+    print(f"DEBUG - analysis_data reçu: {json.dumps(analysis_data, indent=2)[:1000]}...")
+    
+    prompt = f"""
+Tu es un expert en audit de facturation freelance. Analyse la COHÉRENCE ET CRÉDIBILITÉ des imputations.
+
+RÈGLES FACTURATION:
+- 1.0j = Tâches détaillées (pas d'OFF)
+- 0.5j = Tâches + OFF même journée  
+- 0j = Uniquement OFF (congé)
+
+RÈGLES CRÉDIBILITÉ:
+- Analyser le CONTENU des tâches, pas juste la facturation
+- Détecter les journées "légères" ou "imprécises"
+- Juger si les tâches sont réalistes pour un DevOps expérimenté
+- Identifier les patterns suspects (répétitions, manque de détails)
+
+DONNÉES À ANALYSER:
+{json.dumps(analysis_data, indent=2, ensure_ascii=False)}
+
+TÂCHE OBLIGATOIRE: 
+1. Analyser VRAIMENT chaque jour dans les données
+2. Détecter TOUS les problèmes de cohérence facturation
+3. Si il n'y a pas de problèmes, expliquer pourquoi
+4. Si il y a des problèmes, les lister TOUS avec détails
+
+EXEMPLES D'INSIGHTS ATTENDUS:
+- "Jour 15: OFF + tâches détectés, devrait être facturé 0.5j"
+- "Jour 20: Problème: OFF + tâches = 0.5j facturé au lieu de 1.0j"
+- "Jour 25: Problème: Tâches détaillées mais facturé 0.5j au lieu de 1.0j"
+- "Jour 30: Tâche légère 'Fix CI' - manque de détails sur la complexité"
+- "Jour 31: 2 jours consécutifs 'Debug CI' - pattern suspect, manque de précision"
+
+RÈGLE: Alerter sur les INCOHÉRENCES facturation ET sur les problèmes de CRÉDIBILITÉ des tâches !
+
+RÉPONSE JSON:
+{{
+    "summary": "Résumé détaillé de l'analyse de cohérence",
+    "insights": [
+        {{
+            "category": "facturation",
+            "title": "Jour X: Problème/Validation détecté",
+            "description": "Description précise du problème ou validation",
+            "impact": "high|medium|low",
+            "recommendation": "Action corrective ou confirmation",
+            "confidence": 0.9
+        }}
+    ],
+    "business_recommendations": ["Recommandation business concrète"],
+    "coherence_score": 75,
+    "risk_alerts": ["Alerte risque spécifique"]
+}}
+
+IMPORTANT: 
+- Analyser VRAIMENT les données, pas juste retourner un template
+- Analyser le CONTENU des tâches, pas juste la facturation
+- Détecter les journées "légères", "imprécises" ou "suspectes"
+- Si pas de problèmes, expliquer pourquoi dans le summary
+- Si problèmes, les détailler dans insights
+- Réponds UNIQUEMENT en JSON valide
+- AUCUN texte avant ou après le JSON
+
+STOP après le JSON. Pas de commentaires.
+"""
+    return prompt
+
+async def call_ollama(prompt: str) -> str:
+    """
+    Appelle Ollama sur la machine distante
+    """
+    ollama_url = "http://192.168.1.63:11434/api/generate"
+    
+    payload = {
+        "model": "mistral:7b",
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "max_tokens": 8000
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(ollama_url, json=payload)
+        
+        if response.status_code != 200:
+            raise Exception(f"Erreur Ollama: {response.status_code}")
+        
+        result = response.json()
+        return result.get("response", "")
+
+def parse_llm_response(llm_response: str) -> LLMAnalysisResponse:
+    """
+    Parse la réponse LLM et la structure
+    """
+    try:
+        # Debug: afficher la réponse brute
+        print(f"DEBUG - Réponse LLM brute: {llm_response}")
+        
+        # Nettoyer la réponse (enlever markdown si présent)
+        clean_response = llm_response.strip()
+        if clean_response.startswith("```json"):
+            clean_response = clean_response[7:]
+        if clean_response.endswith("```"):
+            clean_response = clean_response[:-3]
+        
+        # Extraire SEULEMENT le JSON (tout ce qui est entre { et })
+        start_idx = clean_response.find('{')
+        end_idx = clean_response.rfind('}') + 1
+        
+        if start_idx == -1 or end_idx == 0:
+            raise Exception("Aucun JSON trouvé dans la réponse")
+        
+        json_only = clean_response[start_idx:end_idx]
+        print(f"DEBUG - JSON extrait: {json_only}")
+        
+        # Parser le JSON
+        parsed = json.loads(json_only)
+        
+        # Valider et structurer
+        insights = []
+        for insight_data in parsed.get("insights", []):
+            insight = LLMInsight(
+                category=insight_data.get("category", "general"),
+                title=insight_data.get("title", ""),
+                description=insight_data.get("description", ""),
+                impact=insight_data.get("impact", "medium"),
+                recommendation=insight_data.get("recommendation", ""),
+                confidence=insight_data.get("confidence", 0.5)
+            )
+            insights.append(insight)
+        
+        return LLMAnalysisResponse(
+            summary=parsed.get("summary", "Analyse LLM terminée"),
+            insights=insights,
+            business_recommendations=parsed.get("business_recommendations", []),
+            coherence_score=parsed.get("coherence_score", 0.0),
+            risk_alerts=parsed.get("risk_alerts", [])
+        )
+        
+    except json.JSONDecodeError as e:
+        # Fallback si le parsing JSON échoue
+        return LLMAnalysisResponse(
+            summary="Analyse LLM terminée (format non standard)",
+            insights=[],
+            business_recommendations=["Vérifier la réponse LLM"],
+            coherence_score=0.0,
+            risk_alerts=["Erreur de parsing", e.msg]
+        )
+    except Exception as e:
+        raise Exception(f"Erreur lors du parsing de la réponse LLM: {str(e)}")

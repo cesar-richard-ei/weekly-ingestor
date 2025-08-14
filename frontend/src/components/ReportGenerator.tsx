@@ -41,15 +41,17 @@ import {
   Download as DownloadIcon,
   NavigateNext as NextIcon,
   NavigateBefore as PrevIcon,
-  CheckCircle as CheckIcon
+  CheckCircle as CheckIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
 import ReportStats from './ReportStats';
 import DataIntelligence from './DataIntelligence';
+import LLMInsights from './LLMInsights';
 import { useClientRates } from '../hooks/useClientRates';
 import { useClients, useClientNames } from '../hooks/useClients';
-import { useReportGeneration, useReportPreview, useUniqueClientsFromReport, useDataAnalysis } from '../hooks/useReportGeneration';
+import { useReportGeneration, useReportPreview, useUniqueClientsFromReport, useDataAnalysis, useLLMAnalysis } from '../hooks/useReportGeneration';
 import ClientRatesEditor from './ClientRatesEditor';
 
 export interface PreviewData {
@@ -80,6 +82,11 @@ const STEPS = [
     label: 'Analyses',
     icon: <AnalyticsIcon />,
     description: 'Explorez les statistiques et graphiques'
+  },
+  {
+    label: 'IA Insights',
+    icon: <PsychologyIcon />,
+    description: 'Analyse LLM et recommandations'
   },
   {
     label: 'Export',
@@ -162,6 +169,24 @@ export default function ReportGenerator() {
     error: analysisError 
   } = useDataAnalysis(startDate, endDate, selectedClients, activeStep === 3);
 
+  // Hook pour l'analyse LLM
+  const llmRequest = useMemo(() => {
+    if (!analysisData || !startDate || !endDate) return null;
+    
+    return {
+      from_date: startDate.format('YYYY-MM-DD'),
+      to_date: endDate.format('YYYY-MM-DD'),
+      client_filter: selectedClients.length > 0 ? selectedClients : undefined,
+      analysis_data: analysisData
+    };
+  }, [analysisData, startDate, endDate, selectedClients]);
+
+  const { 
+    data: llmData, 
+    error: llmError, 
+    isLoading: isLoadingLLM 
+  } = useLLMAnalysis(llmRequest);
+
   // Validation des étapes
   const isStepValid = useCallback((step: number) => {
     switch (step) {
@@ -173,7 +198,9 @@ export default function ReportGenerator() {
         return !!previewData && previewData.length > 0;
       case 3: // Analyses
         return !!previewData && previewData.length > 0;
-      case 4: // Export
+      case 4: // IA Insights
+        return !!previewData && previewData.length > 0;
+      case 5: // Export
         return !!previewData && previewData.length > 0;
       default:
         return false;
@@ -571,9 +598,52 @@ export default function ReportGenerator() {
           </Box>
         </Fade>
 
-        {/* Étape 5: Export */}
+        {/* Étape 5: IA Insights */}
         <Fade in={activeStep === 4} timeout={500}>
           <Box sx={{ display: activeStep === 4 ? 'block' : 'none' }}>
+            <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
+              <CardContent sx={{ p: 4 }}>
+                <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <PsychologyIcon sx={{ mr: 2, color: 'primary.main' }} />
+                  Intelligence Artificielle
+                </Typography>
+                
+                {previewData && previewData.length > 0 ? (
+                  <>
+                    {isLoadingLLM ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                        <Stack spacing={2} alignItems="center">
+                          <CircularProgress size={48} />
+                          <Typography variant="body1">
+                            Analyse IA en cours...
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    ) : llmData ? (
+                      <LLMInsights llmData={llmData} />
+                    ) : llmError ? (
+                      <Alert severity="error">
+                        Erreur lors de l'analyse IA: {llmError.message}
+                      </Alert>
+                    ) : (
+                      <Alert severity="info">
+                        Aucune donnée d'analyse IA disponible
+                      </Alert>
+                    )}
+                  </>
+                ) : (
+                  <Alert severity="info">
+                    Aucune donnée disponible pour l'analyse IA
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Box>
+        </Fade>
+
+        {/* Étape 6: Export */}
+        <Fade in={activeStep === 5} timeout={500}>
+          <Box sx={{ display: activeStep === 5 ? 'block' : 'none' }}>
             <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
               <CardContent sx={{ p: 4 }}>
                 <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>

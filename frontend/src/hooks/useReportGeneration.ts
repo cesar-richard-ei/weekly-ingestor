@@ -93,6 +93,30 @@ export interface DataAnalysisResult {
   donnees_jour: Record<string, any>;
 }
 
+export interface LLMInsight {
+  category: string;
+  title: string;
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+  recommendation: string;
+  confidence: number;
+}
+
+export interface LLMAnalysisResponse {
+  summary: string;
+  insights: LLMInsight[];
+  business_recommendations: string[];
+  coherence_score: number;
+  risk_alerts: string[];
+}
+
+export interface LLMAnalysisRequest {
+  from_date: string;
+  to_date: string;
+  client_filter?: string[];
+  analysis_data: DataAnalysisResult;
+}
+
 // === FONCTIONS EXISTANTES ===
 
 // Fonction pour générer un rapport (prévisualisation)
@@ -125,6 +149,11 @@ const downloadReport = async (params: ReportParams): Promise<Blob> => {
 
 const analyzeData = async (params: DataAnalysisRequest): Promise<DataAnalysisResult> => {
   const response = await axios.post(`${API_URL}/analyze-data`, params);
+  return response.data;
+};
+
+const analyzeWithLLM = async (request: LLMAnalysisRequest): Promise<LLMAnalysisResponse> => {
+  const response = await axios.post(`${API_URL}/analyze-with-llm`, request);
   return response.data;
 };
 
@@ -205,6 +234,16 @@ export const useDataAnalysis = (
     enabled: enabled && !!startDate && !!endDate && selectedClients.length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes - l'analyse change peu
     gcTime: 10 * 60 * 1000,   // 10 minutes en cache
+  });
+};
+
+export const useLLMAnalysis = (request: LLMAnalysisRequest | null) => {
+  return useQuery({
+    queryKey: ['llm-analysis', request],
+    queryFn: () => analyzeWithLLM(request!),
+    enabled: !!request,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,   // 10 minutes
   });
 };
 
