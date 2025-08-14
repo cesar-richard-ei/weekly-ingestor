@@ -1,25 +1,74 @@
-import { Paper, Grid, Typography, Box, Alert, Divider, useTheme, Card, CardContent, Chip, LinearProgress, Tooltip as MuiTooltip } from '@mui/material';
-import { PieChart, Pie, Cell, Legend, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { 
+  Paper, 
+  Grid, 
+  Typography, 
+  Box, 
+  Alert, 
+  Divider, 
+  useTheme, 
+  Card, 
+  CardContent, 
+  Chip, 
+  LinearProgress, 
+  Tooltip as MuiTooltip,
+  Stack,
+  Badge,
+  IconButton
+} from '@mui/material';
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  Legend, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer, 
+  CartesianGrid, 
+  LineChart, 
+  Line, 
+  AreaChart,
+  Area,
+  ComposedChart
+} from 'recharts';
+import { 
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  AttachMoney as MoneyIcon,
+  Schedule as ScheduleIcon,
+  Business as BusinessIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckIcon,
+  Info as InfoIcon
+} from '@mui/icons-material';
 import { PreviewData } from './ReportGenerator';
 import Holidays from 'date-holidays';
-import { parse, isWeekend, format, getDay, addDays } from 'date-fns';
+import { parse, isWeekend, format, getDay, addDays, differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useMemo } from 'react';
 
-// Palette de couleurs adaptée aux graphiques
-const COLORS = ['#2196F3', '#4CAF50', '#FFC107', '#FF5722', '#9C27B0', '#3F51B5', '#009688', '#E91E63'];
-// Couleurs pour les types de jours
-const DAY_COLORS = {
-  work: '#2196F3',
-  half_off: '#FFC107',
-  off: '#E57373',
-  weekend: '#EEEEEE',
-  holiday: '#BDBDBD',
-  empty: '#FAFAFA'
+// Palette de couleurs optimisée pour les métriques business
+const BUSINESS_COLORS = {
+  revenue: '#4CAF50',
+  profit: '#2196F3',
+  warning: '#FF9800',
+  danger: '#F44336',
+  success: '#4CAF50',
+  info: '#2196F3',
+  neutral: '#9E9E9E'
 };
 
-// Jours de la semaine
-const WEEKDAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+// Couleurs pour les types de jours
+const DAY_COLORS = {
+  work: '#4CAF50',
+  half_off: '#FF9800',
+  off: '#F44336',
+  weekend: '#9E9E9E',
+  holiday: '#2196F3',
+  empty: '#E0E0E0'
+};
 
 interface ReportStatsProps {
   data: PreviewData[];
@@ -28,792 +77,440 @@ interface ReportStatsProps {
 
 export default function ReportStats({ data, getClientRate }: ReportStatsProps) {
   const theme = useTheme();
-  // Initialisation du calendrier des jours fériés français
   const hd = useMemo(() => new Holidays('FR'), []);
 
-  // Statistiques par client (avec les clients réellement sélectionnés) - optimisé avec useMemo
-  const clientStats = useMemo(() => {
-    return data
-      .filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0')
-      .reduce((acc: { [key: string]: { hours: number; revenue: number } }, curr) => {
-        if (!curr.client) return acc;
+  // === MÉTRIQUES BUSINESS PRINCIPALES ===
+  
+  // Revenus et rentabilité
+  const businessMetrics = useMemo(() => {
+    const workData = data.filter(d => (d.type === 'work' || d.type === 'half_off') && d.duration !== '0');
+    
+    let totalRevenue = 0;
+    let totalHours = 0;
+    let clientRevenue: { [key: string]: { hours: number; revenue: number; rate: number } } = {};
+    
+    workData.forEach(item => {
+      if (!item.client) return;
+      
+      const clients = item.client.split(" + ");
+      const duration = parseFloat(item.duration);
+      const durationPerClient = duration / clients.length;
+      
+      clients.forEach(client => {
+        const clientName = client.trim();
+        const rate = getClientRate(clientName);
+        const revenue = durationPerClient * rate;
         
-        // Traiter chaque client individuellement
-        const clients = curr.client.split(" + ");
-        clients.forEach(client => {
-          const clientName = client.trim();
-          if (!acc[clientName]) {
-            acc[clientName] = { hours: 0, revenue: 0 };
-          }
-          
-          // Durée proportionnelle au nombre de clients
-          const duration = parseFloat(curr.duration) / clients.length;
-          acc[clientName].hours += duration;
-          
-          // Calculer le revenu avec le TJM spécifique à ce client
-          const clientRate = getClientRate(clientName);
-          acc[clientName].revenue += duration * clientRate;
-        });
+        if (!clientRevenue[clientName]) {
+          clientRevenue[clientName] = { hours: 0, revenue: 0, rate: 0 };
+        }
         
-        return acc;
-      }, {});
+        clientRevenue[clientName].hours += durationPerClient;
+        clientRevenue[clientName].revenue += revenue;
+        clientRevenue[clientName].rate = rate;
+        
+        totalRevenue += revenue;
+        totalHours += durationPerClient;
+      });
+    });
+    
+    const averageRate = totalHours > 0 ? totalRevenue / totalHours : 0;
+    const targetRate = 500; // À personnaliser selon ton TJM cible
+    const rateEfficiency = targetRate > 0 ? (averageRate / targetRate) * 100 : 0;
+    
+    return {
+      totalRevenue,
+      totalHours,
+      averageRate,
+      rateEfficiency,
+      targetRate,
+      clientRevenue
+    };
   }, [data, getClientRate]);
 
-  const clientBarData = useMemo(() => {
-    return Object.entries(clientStats)
-      .map(([name, data]) => ({ 
-        name, 
-        value: parseFloat(data.hours.toFixed(2)),
-        revenue: data.revenue
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [clientStats]);
-
-  // Calcul des statistiques par date - optimisé avec useMemo
-  const statsByDate = useMemo(() => {
-    return data.reduce((acc: { [key: string]: { 
-      workDays: number,
-      halfDays: number,
-      offDays: number,
-      totalDuration: number,
-      type: string
-    }}, curr) => {
-      if (!acc[curr.date]) {
-        acc[curr.date] = {
-          workDays: 0,
-          halfDays: 0,
-          offDays: 0,
-          totalDuration: 0,
-          type: curr.type
-        };
-      }
-
-      if (curr.type === 'work' && curr.duration !== '0') {
-        acc[curr.date].workDays += 1;
-        acc[curr.date].totalDuration += parseFloat(curr.duration);
-      } else if (curr.type === 'half_off') {
-        acc[curr.date].halfDays += 1;
-        acc[curr.date].totalDuration += parseFloat(curr.duration);
-      } else if (curr.type === 'off' || (curr.type === 'work' && curr.duration === '0')) {
-        acc[curr.date].offDays += 1;
-      }
-
-      return acc;
-    }, {});
-  }, [data]);
-
-  // Statistiques de répartition des jours - optimisé avec useMemo
-  const dayStats = useMemo(() => {
-    const workDays = Object.values(statsByDate).filter(s => s.totalDuration > 0 && s.type === 'work').length;
-    const halfDays = Object.values(statsByDate).filter(s => s.type === 'half_off').length;
-    const offDays = Object.values(statsByDate).filter(s => s.type === 'off').length;
+  // Efficacité temporelle
+  const timeEfficiency = useMemo(() => {
+    const totalDays = data.length;
+    const workDays = data.filter(d => d.type === 'work' && d.duration !== '0').length;
+    const halfDays = data.filter(d => d.type === 'half_off').length;
+    const offDays = data.filter(d => d.type === 'off' || d.type === 'holiday').length;
     const weekendDays = data.filter(d => d.type === 'weekend').length;
-    const holidayDays = data.filter(d => d.type === 'holiday').length;
-
-    return { workDays, halfDays, offDays, weekendDays, holidayDays };
-  }, [statsByDate, data]);
-
-  // Calcul des jours non saisis (hors weekends et jours fériés) - optimisé avec useMemo
-  const nonFilledDays = useMemo(() => {
-    return data.filter(d => {
-      if (d.type !== 'empty') return false;
-      const date = parse(d.date, 'dd/MM/yyyy', new Date());
-      if (isWeekend(date)) return false;
-      const isHoliday = hd.isHoliday(date);
-      return !isHoliday;
-    }).length;
-  }, [data, hd]);
-
-  // Calcul du total des heures travaillées - optimisé avec useMemo
-  const totalWorkHours = useMemo(() => {
-    return Object.values(statsByDate)
-      .reduce((acc, curr) => acc + curr.totalDuration, 0);
-  }, [statsByDate]);
-
-  // Calcul du CA total en utilisant les TJM spécifiques par client - optimisé avec useMemo
-  const totalRevenue = useMemo(() => {
-    return Object.values(clientStats)
-      .reduce((acc, curr) => acc + curr.revenue, 0);
-  }, [clientStats]);
-
-  // Données pour le graphique en camembert des types de jours - optimisé avec useMemo
-  const dayTypePieData = useMemo(() => {
-    return [
-      { name: 'Jours travaillés', value: dayStats.workDays, color: DAY_COLORS.work },
-      { name: 'Demi-journées', value: dayStats.halfDays, color: DAY_COLORS.half_off },
-      { name: 'Jours off', value: dayStats.offDays, color: DAY_COLORS.off },
-      { name: 'Week-ends', value: dayStats.weekendDays, color: DAY_COLORS.weekend },
-      { name: 'Jours fériés', value: dayStats.holidayDays, color: DAY_COLORS.holiday },
-    ].filter(item => item.value > 0);
-  }, [dayStats]);
-
-  // Distribution par mois si la période est suffisamment longue - optimisé avec useMemo
-  const monthlyBarData = useMemo(() => {
-    const monthlyData = data
-      .filter(d => d.type === 'work' || d.type === 'half_off')
-      .reduce((acc: { [key: string]: number }, curr) => {
-        const date = parse(curr.date, 'dd/MM/yyyy', new Date());
-        const monthYear = format(date, 'MMM yyyy', { locale: fr });
-        
-        acc[monthYear] = (acc[monthYear] || 0) + parseFloat(curr.duration);
-        return acc;
-      }, {});
-
-    return Object.entries(monthlyData)
-      .map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }))
-      .sort((a, b) => {
-        // Trier par date
-        const dateA = parse(a.name, 'MMM yyyy', new Date(), { locale: fr });
-        const dateB = parse(b.name, 'MMM yyyy', new Date(), { locale: fr });
-        return dateA.getTime() - dateB.getTime();
-      });
+    
+    const availableDays = totalDays - weekendDays;
+    const productiveDays = workDays + (halfDays * 0.5);
+    const efficiencyRate = availableDays > 0 ? (productiveDays / availableDays) * 100 : 0;
+    
+    return {
+      totalDays,
+      workDays,
+      halfDays,
+      offDays,
+      weekendDays,
+      availableDays,
+      productiveDays,
+      efficiencyRate
+    };
   }, [data]);
 
-  // Vérifier s'il y a assez de données
-  const hasEnoughDataForCharts = totalWorkHours > 0;
-  
-  // Nouvelles métriques avancées - optimisées avec useMemo
-  
-  // 1. Taux d'occupation et productivité
-  const occupancyData = useMemo(() => {
-    // Calculer le nombre total de jours ouvrables dans la période (hors weekends et jours fériés)
-    let workableDays = 0;
-    let firstDate: Date | null = null;
-    let lastDate: Date | null = null;
-    
-    // Extraire les dates min et max de la période
-    data.forEach(item => {
-      const currentDate = parse(item.date, 'dd/MM/yyyy', new Date());
-      if (!firstDate || currentDate < firstDate) firstDate = currentDate;
-      if (!lastDate || currentDate > lastDate) lastDate = currentDate;
-    });
-    
-    // Calculer le nombre de jours ouvrables
-    if (firstDate && lastDate) {
-      let currentDate = firstDate;
-      while (currentDate <= lastDate) {
-        if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
-          workableDays++;
-        }
-        currentDate = addDays(currentDate, 1);
-      }
-    }
-    
-    // Taux d'occupation (jours travaillés / jours ouvrables)
-    const occupancyRate = workableDays > 0 
-      ? (totalWorkHours / workableDays) * 100
-      : 0;
-
-    return { workableDays, firstDate, lastDate, occupancyRate };
-  }, [data, hd, totalWorkHours]);
-    
-  // Répartition par jour de la semaine - optimisé avec useMemo
-  const weekdayData = useMemo(() => {
-    const weekdayDistribution = Array(7).fill(0);
-    data.forEach(item => {
-      if (item.type === 'work' || item.type === 'half_off') {
-        const date = parse(item.date, 'dd/MM/yyyy', new Date());
-        const dayOfWeek = getDay(date);
-        weekdayDistribution[dayOfWeek] += parseFloat(item.duration);
-      }
-    });
-    
-    return weekdayDistribution.map((value, index) => ({
-      name: WEEKDAYS[index],
-      value: parseFloat(value.toFixed(2))
-    })).filter((_, index) => index !== 0 && index !== 6); // Filtrer weekend si souhaité
-  }, [data]);
-  
-  // Tendance d'activité quotidienne - optimisé avec useMemo
-  const dailyActivityData = useMemo(() => {
-    const dailyActivityData: { date: string; value: number }[] = [];
-    
-    if (occupancyData.firstDate && occupancyData.lastDate) {
-      const dateMap = new Map<string, number>();
-      
-      // Initialiser toutes les dates dans la période
-      let currentDate = occupancyData.firstDate;
-      while (currentDate <= occupancyData.lastDate) {
-        if (!isWeekend(currentDate) && !hd.isHoliday(currentDate)) {
-          const dateStr = format(currentDate, 'dd/MM');
-          dateMap.set(dateStr, 0);
-        }
-        currentDate = addDays(currentDate, 1);
-      }
-      
-      // Remplir avec les données réelles
-      data.forEach(item => {
-        if (item.type === 'work' || item.type === 'half_off') {
-          const date = parse(item.date, 'dd/MM/yyyy', new Date());
-          const dateStr = format(date, 'dd/MM');
-          dateMap.set(dateStr, (dateMap.get(dateStr) || 0) + parseFloat(item.duration));
-        }
-      });
-      
-      // Convertir en tableau pour le graphique
-      dateMap.forEach((value, date) => {
-        dailyActivityData.push({ date, value: parseFloat(value.toFixed(1)) });
-      });
-      
-      // Trier par date
-      dailyActivityData.sort((a, b) => {
-        const dateA = parse(a.date, 'dd/MM', new Date());
-        const dateB = parse(b.date, 'dd/MM', new Date());
-        return dateA.getTime() - dateB.getTime();
-      });
-    }
-    
-    return dailyActivityData;
-  }, [data, hd, occupancyData.firstDate, occupancyData.lastDate]);
-  
-  // 2. Analyse des clients plus approfondie - optimisé avec useMemo
-  const clientAnalysis = useMemo(() => {
-    // Top clients
-    const topClients = clientBarData.slice(0, 3);
-    
-    // Calcul de la diversification (indice de concentration)
-    // On utilise un indice d'Herfindahl-Hirschman simplifié
-    let diversificationIndex = 0;
-    if (clientBarData.length > 0) {
-      const totalClientWork = clientBarData.reduce((sum, item) => sum + item.value, 0);
-      diversificationIndex = clientBarData.reduce((sum, item) => {
-        const share = item.value / totalClientWork;
-        return sum + (share * share);
-      }, 0);
-    }
-    
-    // Interprétation de l'indice de diversification
-    let diversificationText = "";
-    if (diversificationIndex >= 0.6) diversificationText = "Faible";
-    else if (diversificationIndex > 0.4) diversificationText = "Moyenne";
-    else if (diversificationIndex > 0.2) diversificationText = "Bonne";
-    
-    return { topClients, diversificationIndex, diversificationText };
-  }, [clientBarData]);
-  
-  // Calcul des revenus par jour pour identifier les jours les plus prolifiques - optimisé avec useMemo
-  const topRevenueDays = useMemo(() => {
-    const revenueByDay: { [key: string]: number } = {};
-    
-    data.forEach(item => {
-      if ((item.type === 'work' || item.type === 'half_off') && item.client && item.duration !== '0') {
-        if (!revenueByDay[item.date]) {
-          revenueByDay[item.date] = 0;
-        }
-        
-        const clients = item.client.split(" + ");
-        const duration = parseFloat(item.duration) / clients.length;
-        
-        clients.forEach(client => {
-          const clientName = client.trim();
-          const rate = getClientRate(clientName);
-          revenueByDay[item.date] += duration * rate;
-        });
-      }
-    });
-    
-    // Transformer en tableau pour affichage
-    return Object.entries(revenueByDay)
-      .map(([date, revenue]) => ({ date, revenue }))
+  // Top clients par rentabilité
+  const topClients = useMemo(() => {
+    return Object.entries(businessMetrics.clientRevenue)
+      .map(([name, data]) => ({
+        name,
+        revenue: data.revenue,
+        hours: data.hours,
+        rate: data.rate,
+        efficiency: data.hours > 0 ? data.revenue / data.hours : 0
+      }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [data, getClientRate]);
-  
-  // 3. Visualisations avancées - optimisé avec useMemo
-  const radarData = useMemo(() => {
-    return clientBarData.slice(0, 5).map(client => {
-      const obj: Record<string, any> = { name: client.name };
-      obj.value = client.value;
-      return obj;
-    });
-  }, [clientBarData]);
-  
-  // 4. Métriques financières - optimisé avec useMemo
-  const financialMetrics = useMemo(() => {
-    // Moyenne du revenu quotidien
-    let avgDailyRevenue = totalRevenue / occupancyData.workableDays;
+  }, [businessMetrics.clientRevenue]);
+
+  // Tendances et alertes business
+  const businessAlerts = useMemo(() => {
+    const alerts = [];
     
-    // Récupération des jours avec clients et nombre moyen de clients par jour
-    const daysWithClients = new Set<string>();
-    let totalClients = 0;
-    let avgClientsPerDay = 0;
-    
-    data.forEach(item => {
-      if (item.type === 'work' && item.client) {
-        daysWithClients.add(item.date);
-        const clientCount = item.client.split(" + ").length;
-        totalClients += clientCount;
-      }
-    });
-    
-    if (daysWithClients.size > 0) {
-      avgClientsPerDay = totalClients / daysWithClients.size;
+    // Alerte TJM moyen
+    if (businessMetrics.rateEfficiency < 80) {
+      alerts.push({
+        type: 'warning',
+        icon: <WarningIcon />,
+        title: 'TJM moyen en baisse',
+        message: `Ton TJM moyen (${businessMetrics.averageRate.toFixed(0)}€) est ${(100 - businessMetrics.rateEfficiency).toFixed(0)}% en dessous de ton objectif (${businessMetrics.targetRate}€)`,
+        action: 'Revoir tes tarifs ou négocier mieux'
+      });
     }
     
-    return { avgDailyRevenue, avgClientsPerDay };
-  }, [totalRevenue, occupancyData.workableDays, data]);
-  
-  // Ajouter un visuel pour les TJM par client dans la section Analyse des clients - optimisé avec useMemo
-  const clientRatesData = useMemo(() => {
-    return clientBarData.slice(0, 5).map(client => {
-      const rate = getClientRate(client.name);
-      return {
-        name: client.name,
-        rate
-      };
-    });
-  }, [clientBarData, getClientRate]);
+    // Alerte charge de travail
+    if (timeEfficiency.efficiencyRate < 60) {
+      alerts.push({
+        type: 'info',
+        icon: <InfoIcon />,
+        title: 'Charge de travail faible',
+        message: `Tu n'utilises que ${timeEfficiency.efficiencyRate.toFixed(0)}% de ton temps disponible`,
+        action: 'Opportunité de prospection ou formation'
+      });
+    }
+    
+    // Alerte concentration client
+    if (topClients.length > 0 && topClients[0].revenue > businessMetrics.totalRevenue * 0.5) {
+      alerts.push({
+        type: 'warning',
+        icon: <WarningIcon />,
+        title: 'Concentration client élevée',
+        message: `Ton client principal représente ${((topClients[0].revenue / businessMetrics.totalRevenue) * 100).toFixed(0)}% de tes revenus`,
+        action: 'Diversifier ta clientèle'
+      });
+    }
+    
+    // Alerte positive si tout va bien
+    if (alerts.length === 0) {
+      alerts.push({
+        type: 'success',
+        icon: <CheckIcon />,
+        title: 'Excellent !',
+        message: 'Tes métriques business sont au top !',
+        action: 'Continue comme ça !'
+      });
+    }
+    
+    return alerts;
+  }, [businessMetrics, timeEfficiency, topClients]);
+
+  // Données pour les graphiques
+  const chartData = useMemo(() => {
+    // Répartition des revenus par client
+    const revenueByClient = topClients.map(client => ({
+      name: client.name,
+      revenue: client.revenue,
+      hours: client.hours,
+      rate: client.rate
+    }));
+    
+    // Efficacité temporelle par jour
+    const dailyEfficiency = data.slice(0, 30).map(item => ({
+      date: item.date,
+      type: item.type,
+      duration: parseFloat(item.duration) || 0,
+      isProductive: item.type === 'work' || item.type === 'half_off'
+    }));
+    
+    // Répartition des types de jours
+    const dayTypeDistribution = [
+      { name: 'Travail', value: timeEfficiency.workDays, color: DAY_COLORS.work },
+      { name: 'Demi-journée', value: timeEfficiency.halfDays, color: DAY_COLORS.half_off },
+      { name: 'Congés', value: timeEfficiency.offDays, color: DAY_COLORS.off },
+      { name: 'Weekends', value: timeEfficiency.weekendDays, color: DAY_COLORS.weekend }
+    ];
+    
+    return {
+      revenueByClient,
+      dailyEfficiency,
+      dayTypeDistribution
+    };
+  }, [data, topClients, timeEfficiency]);
 
   return (
-    <>
-      <Paper sx={{ p: 3, mb: 3 }}>
-        {nonFilledDays > 0 && (
-          <Alert severity="warning" sx={{ mb: 3 }}>
-            {nonFilledDays} jour{nonFilledDays > 1 ? 's' : ''} non saisi{nonFilledDays > 1 ? 's' : ''} sur la période sélectionnée (hors weekends et jours fériés)
-          </Alert>
-        )}
-        
-        <Typography variant="h6" gutterBottom>
-          Statistiques de la période
-        </Typography>
-        
-        <Grid container spacing={3}>
-          {/* Compteurs principaux */}
-          <Grid component="div" item xs={12} md={6} lg={3}>
-            <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Typography variant="h4" color="primary">
-                {occupancyData.workableDays}
-              </Typography>
-              <Typography variant="subtitle1">
-                Jours facturables
-              </Typography>
-            </Box>
+    <Box sx={{ width: '100%' }}>
+      {/* En-tête avec métriques principales */}
+      <Card elevation={3} sx={{ mb: 3, borderRadius: 3, background: `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.secondary.main}15)` }}>
+        <CardContent sx={{ p: 4 }}>
+          <Typography variant="h4" gutterBottom align="center" sx={{ fontWeight: 700, color: theme.palette.primary.main }}>
+            📊 Dashboard Business Freelance
+          </Typography>
+          
+          <Grid container spacing={3} sx={{ mt: 2 }}>
+            {/* Revenus totaux */}
+            <Grid item xs={12} md={3}>
+              <Card sx={{ textAlign: 'center', p: 2, background: BUSINESS_COLORS.revenue + '15' }}>
+                <MoneyIcon sx={{ fontSize: 40, color: BUSINESS_COLORS.revenue, mb: 1 }} />
+                <Typography variant="h5" sx={{ fontWeight: 700, color: BUSINESS_COLORS.revenue }}>
+                  {businessMetrics.totalRevenue.toFixed(0)}€
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Revenus totaux
+                </Typography>
+              </Card>
+            </Grid>
             
-            <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Typography variant="h4" color="success.main">
-                {totalRevenue.toLocaleString()}€
-              </Typography>
-              <Typography variant="subtitle1">
-                Chiffre d'affaires
-              </Typography>
-            </Box>
+            {/* Heures facturables */}
+            <Grid item xs={12} md={3}>
+              <Card sx={{ textAlign: 'center', p: 2, background: BUSINESS_COLORS.profit + '15' }}>
+                <ScheduleIcon sx={{ fontSize: 40, color: BUSINESS_COLORS.profit, mb: 1 }} />
+                <Typography variant="h5" sx={{ fontWeight: 700, color: BUSINESS_COLORS.profit }}>
+                  {businessMetrics.totalHours.toFixed(1)}h
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Heures facturables
+                </Typography>
+              </Card>
+            </Grid>
+            
+            {/* TJM moyen */}
+            <Grid item xs={12} md={3}>
+              <Card sx={{ textAlign: 'center', p: 2, background: BUSINESS_COLORS.info + '15' }}>
+                <BusinessIcon sx={{ fontSize: 40, color: BUSINESS_COLORS.info, mb: 1 }} />
+                <Typography variant="h5" sx={{ fontWeight: 700, color: BUSINESS_COLORS.info }}>
+                  {businessMetrics.averageRate.toFixed(0)}€
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  TJM moyen
+                </Typography>
+              </Card>
+            </Grid>
+            
+            {/* Efficacité temporelle */}
+            <Grid item xs={12} md={3}>
+              <Card sx={{ textAlign: 'center', p: 2, background: BUSINESS_COLORS.success + '15' }}>
+                <TrendingUpIcon sx={{ fontSize: 40, color: BUSINESS_COLORS.success, mb: 1 }} />
+                <Typography variant="h5" sx={{ fontWeight: 700, color: BUSINESS_COLORS.success }}>
+                  {timeEfficiency.efficiencyRate.toFixed(0)}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Efficacité temporelle
+                </Typography>
+              </Card>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="info.main">
-                {totalWorkHours.toFixed(1)}
-              </Typography>
-              <Typography variant="subtitle1">
-                Jour(s) de présence
-              </Typography>
-            </Box>
-          </Grid>
+      {/* Alertes business intelligentes */}
+      <Card elevation={2} sx={{ mb: 3, borderRadius: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <InfoIcon sx={{ mr: 1, color: 'primary.main' }} />
+            Alertes Business
+          </Typography>
           
-          {/* Graphique de répartition des types de jours */}
-          <Grid component="div" item xs={12} md={6} lg={3}>
-            <Typography variant="subtitle1" align="center" gutterBottom>
-              Répartition des types de jours
-            </Typography>
-            
-            {hasEnoughDataForCharts ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={dayTypePieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    innerRadius={30}
-                    paddingAngle={1}
-                  >
-                    {dayTypePieData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={entry.color} 
-                        stroke={theme.palette.background.paper}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <Box sx={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Pas assez de données pour afficher ce graphique
-                </Typography>
-              </Box>
-            )}
-          </Grid>
-          
-          {/* Graphique de répartition par client */}
-          <Grid component="div" item xs={12} md={6} lg={6}>
-            <Typography variant="subtitle1" align="center" gutterBottom>
-              Répartition par client (en jours)
-            </Typography>
-            
-            {clientBarData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart 
-                  data={clientBarData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end"
-                    height={60}
-                    interval={0}
-                  />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
-                  <Bar dataKey="value" fill="#3f51b5">
-                    {clientBarData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Box sx={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Aucun client à afficher pour cette période
-                </Typography>
-              </Box>
-            )}
-          </Grid>
-          
-          {/* Graphique de distribution mensuelle (si assez de données) */}
-          {monthlyBarData.length > 1 && (
-            <Grid component="div" item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle1" align="center" gutterBottom>
-                Distribution mensuelle
+          <Stack spacing={2}>
+            {businessAlerts.map((alert, index) => (
+              <Alert
+                key={index}
+                severity={alert.type}
+                icon={alert.icon}
+                sx={{ borderRadius: 2 }}
+              >
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    {alert.title}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {alert.message}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    💡 {alert.action}
+                  </Typography>
+                </Box>
+              </Alert>
+            ))}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Grid container spacing={3}>
+        {/* Top clients par rentabilité */}
+        <Grid item xs={12} lg={6}>
+          <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <TrendingUpIcon sx={{ mr: 1, color: BUSINESS_COLORS.revenue }} />
+                Top Clients par Revenus
               </Typography>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart 
-                  data={monthlyBarData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
+              
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData.revenueByClient}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
-                  <Bar dataKey="value" fill="#4caf50" />
+                  <Tooltip 
+                    formatter={(value: any, name: any) => [
+                      `${value.toFixed(0)}€`, 
+                      name === 'revenue' ? 'Revenus' : 'Heures'
+                    ]}
+                  />
+                  <Bar dataKey="revenue" fill={BUSINESS_COLORS.revenue} name="Revenus" />
                 </BarChart>
               </ResponsiveContainer>
-            </Grid>
-          )}
-        </Grid>
-      </Paper>
-      
-      {/* Nouvelle section pour les analyses avancées */}
-      {hasEnoughDataForCharts && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Analyses avancées
-          </Typography>
-          
-          <Grid container spacing={3}>
-            {/* 1. Taux d'occupation et productivité */}
-            <Grid component="div" item xs={12} md={6}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Taux d'occupation et productivité
-                  </Typography>
-                  
-                  <Box sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2">Taux d'occupation</Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {occupancyData.occupancyRate.toFixed(0)}%
-                      </Typography>
-                    </Box>
-                    <MuiTooltip title={`${totalWorkHours.toFixed(1)} jours facturés sur ${occupancyData.workableDays} jours ouvrables disponibles`}>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={Math.min(occupancyData.occupancyRate, 100)} 
-                        color={occupancyData.occupancyRate > 80 ? "success" : occupancyData.occupancyRate > 50 ? "primary" : "warning"}
-                        sx={{ height: 8, borderRadius: 1 }}
-                      />
-                    </MuiTooltip>
-                  </Box>
-                  
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    Intensité par jour de semaine
-                  </Typography>
-                  
-                  <ResponsiveContainer width="100%" height={150}>
-                    <BarChart data={weekdayData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
-                      <Bar dataKey="value" fill={theme.palette.primary.light} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  
-                  {dailyActivityData.length > 5 && (
-                    <>
-                      <Divider sx={{ my: 2 }} />
-                      
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        Tendance d'activité
-                      </Typography>
-                      
-                      <ResponsiveContainer width="100%" height={150}>
-                        <LineChart data={dailyActivityData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip formatter={(value) => [`${value} jour(s)`, ""]} />
-                          <Line 
-                            type="monotone" 
-                            dataKey="value" 
-                            stroke={theme.palette.primary.main} 
-                            dot={{ r: 2 }}
-                            activeDot={{ r: 4 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-            
-            {/* 2. Analyse des clients plus approfondie */}
-            <Grid component="div" item xs={12} md={6}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Analyse des clients
-                  </Typography>
-                  
-                  {clientAnalysis.topClients.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        Top clients
-                      </Typography>
-                      
-                      <Grid container spacing={1}>
-                        {clientAnalysis.topClients.map((client, index) => {
-                          const percentage = ((client.value / totalWorkHours) * 100).toFixed(0);
-                          return (
-                            <Grid component="div" item xs={12} key={client.name}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                <Typography variant="body2" noWrap>
-                                  {client.name}
-                                </Typography>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {client.value.toFixed(1)}j ({percentage}%)
-                                </Typography>
-                              </Box>
-                              <LinearProgress 
-                                variant="determinate" 
-                                value={Number(percentage)} 
-                                color={index === 0 ? "primary" : index === 1 ? "success" : "info"}
-                                sx={{ height: 6, borderRadius: 1 }}
-                              />
-                            </Grid>
-                          );
-                        })}
-                      </Grid>
-                    </Box>
-                  )}
-                  
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      Diversification client
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                      <Typography variant="body2">
-                        Indice de concentration: {clientAnalysis.diversificationIndex.toFixed(2)}
-                      </Typography>
-                      <MuiTooltip title="Mesure la répartition de votre activité entre différents clients. Plus l'indice est bas, plus votre activité est diversifiée.">
-                        <Box component="span" sx={{ ml: 1, cursor: 'help', color: 'text.secondary', fontSize: '0.8rem' }}>
-                          ⓘ
-                        </Box>
-                      </MuiTooltip>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2">
-                        Niveau de diversification
-                      </Typography>
+              
+              <Stack spacing={1} sx={{ mt: 2 }}>
+                {topClients.map((client, index) => (
+                  <Box key={client.name} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Chip 
-                        label={clientAnalysis.diversificationText} 
+                        label={`#${index + 1}`} 
                         size="small" 
-                        color={
-                          clientAnalysis.diversificationText === "Faible" ? "success" :
-                          clientAnalysis.diversificationText === "Moyenne" ? "warning" :
-                          "error"
-                        }
+                        sx={{ mr: 1, backgroundColor: BUSINESS_COLORS.revenue, color: 'white' }}
                       />
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {client.name}
+                      </Typography>
                     </Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: BUSINESS_COLORS.revenue }}>
+                      {client.revenue.toFixed(0)}€
+                    </Typography>
                   </Box>
-                  
-                  {radarData.length > 0 && (
-                    <>
-                      <Divider sx={{ my: 2 }} />
-                      
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        Visualisation répartition du volume de travail
-                      </Typography>
-                      
-                      <ResponsiveContainer width="100%" height={200}>
-                        <RadarChart 
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          width={500}
-                          height={300}
-                          data={radarData}
-                        >
-                          <PolarGrid />
-                          <PolarAngleAxis dataKey="name" />
-                          <PolarRadiusAxis />
-                          <Radar
-                            name="Répartition du volume de travail"
-                            dataKey="value"
-                            stroke="#8884d8"
-                            fill="#8884d8"
-                            fillOpacity={0.6}
-                          />
-                          <Tooltip />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </>
-                  )}
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
 
-                  {/* Code pour afficher les TJM par client */}
-                  {clientAnalysis.topClients.length > 0 && (
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        TJM par client
-                      </Typography>
-                      
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {clientRatesData.map((client) => (
-                          <Chip 
-                            key={client.name}
-                            label={`${client.name}: ${client.rate}€`}
-                            variant="outlined"
-                            size="small"
-                          />
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-            
-            {/* Section des jours les plus prolifiques */}
-            <Grid component="div" item xs={12} md={6}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Jours les plus prolifiques
-                  </Typography>
-                  
-                  {topRevenueDays.length > 0 ? (
-                    <>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        Top 5 des jours générant le plus de revenus
-                      </Typography>
-                      
-                      <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={topRevenueDays}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip formatter={(value) => [`${Number(value).toFixed(0)} €`, "Revenus"]} />
-                          <Bar dataKey="revenue" fill={theme.palette.success.main} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                      
-                      <Box sx={{ mt: 2 }}>
-                        {topRevenueDays.map((day, index) => (
-                          <Box key={day.date} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography variant="body2">
-                              {index + 1}. {day.date}
-                            </Typography>
-                            <Typography variant="body2" fontWeight="bold">
-                              {day.revenue.toFixed(0)} €
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Box>
-                    </>
-                  ) : (
-                    <Alert severity="info">
-                      Aucune donnée de revenus disponible pour cette période
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-            
-            {/* 3-4. Métriques financières et Productivité */}
-            <Grid component="div" item xs={12}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Grid container spacing={3}>
-                    {/* Métriques financières */}
-                    <Grid component="div" item xs={12} md={6}>
-                      <Typography variant="subtitle1" gutterBottom>
-                        Métriques financières
-                      </Typography>
-                      
-                      <Box sx={{ mb: 1 }}>
-                        <Typography variant="body2" gutterBottom>
-                          Moyenne du revenu quotidien
+        {/* Répartition des types de jours */}
+        <Grid item xs={12} lg={6}>
+          <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <ScheduleIcon sx={{ mr: 1, color: BUSINESS_COLORS.info }} />
+                Répartition Temporelle
+              </Typography>
+              
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={chartData.dayTypeDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {chartData.dayTypeDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Efficacité temporelle:</strong> {timeEfficiency.efficiencyRate.toFixed(1)}%
+                </Typography>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={timeEfficiency.efficiencyRate} 
+                  sx={{ 
+                    height: 8, 
+                    borderRadius: 4,
+                    backgroundColor: 'grey.200',
+                    '& .MuiLinearProgress-bar': {
+                      backgroundColor: timeEfficiency.efficiencyRate > 70 ? BUSINESS_COLORS.success : 
+                                    timeEfficiency.efficiencyRate > 50 ? BUSINESS_COLORS.warning : BUSINESS_COLORS.danger
+                    }
+                  }} 
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  {timeEfficiency.productiveDays} jours productifs sur {timeEfficiency.availableDays} disponibles
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Efficacité par client */}
+        <Grid item xs={12}>
+          <Card elevation={2} sx={{ borderRadius: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <BusinessIcon sx={{ mr: 1, color: BUSINESS_COLORS.profit }} />
+                Efficacité Business par Client
+              </Typography>
+              
+              <Grid container spacing={2}>
+                {topClients.map((client, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={client.name}>
+                    <Card variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {client.name}
                         </Typography>
-                        <Typography variant="h5" color="success.main">
-                          {financialMetrics.avgDailyRevenue.toLocaleString()} €
-                        </Typography>
+                        <Chip 
+                          label={`#${index + 1}`} 
+                          size="small" 
+                          color="primary"
+                        />
                       </Box>
-                    </Grid>
-                    
-                    {/* Productivité et planification */}
-                    <Grid component="div" item xs={12} md={6}>
-                      <Typography variant="subtitle1" gutterBottom>
-                        Productivité et planification
-                      </Typography>
                       
-                      <Box sx={{ mb: 1 }}>
+                      <Stack spacing={1}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2">
-                            Taux de fragmentation client
-                            <MuiTooltip title="Nombre moyen de clients différents par jour de travail. Un taux élevé indique un fort context switching.">
-                              <Box component="span" sx={{ ml: 1, cursor: 'help', color: 'text.secondary', fontSize: '0.8rem' }}>
-                                ⓘ
-                              </Box>
-                            </MuiTooltip>
-                          </Typography>
-                          <Typography variant="body2" fontWeight="bold">
-                            {financialMetrics.avgClientsPerDay.toFixed(1)} clients/jour
+                          <Typography variant="body2" color="text.secondary">Revenus:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: BUSINESS_COLORS.revenue }}>
+                            {client.revenue.toFixed(0)}€
                           </Typography>
                         </Box>
-                      </Box>
-                    </Grid>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Heures:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {client.hours.toFixed(1)}h
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">TJM:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: BUSINESS_COLORS.info }}>
+                            {client.rate}€
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Efficacité:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: BUSINESS_COLORS.success }}>
+                            {client.efficiency.toFixed(0)}€/h
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </Card>
                   </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-    </>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
   );
 } 
