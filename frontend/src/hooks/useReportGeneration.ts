@@ -15,6 +15,86 @@ export interface ReportResponse {
   format: 'json' | 'excel';
 }
 
+// === NOUVEAU : INTERFACES POUR L'ANALYSE INTELLIGENTE ===
+
+export interface DataAnalysisRequest {
+  from_date: string;
+  to_date: string;
+  client_filter: string[];
+}
+
+export interface Anomaly {
+  type: 'heures_impossibles' | 'heures_negatives' | 'sous_activite' | 'sur_activite' | 'jour_vide';
+  severity: 'error' | 'warning' | 'info';
+  date: string;
+  message: string;
+  details: any;
+}
+
+export interface Incoherence {
+  type: 'off_avec_notes' | 'demi_journee_sans_off';
+  date: string;
+  client: string;
+  message: string;
+  details: any;
+}
+
+export interface Gap {
+  debut: string;
+  fin: string;
+  duree: number;
+  message: string;
+}
+
+export interface WeeklyPattern {
+  moyenne: number;
+  min: number;
+  max: number;
+  nb_jours: number;
+}
+
+export interface DataAnalysisResult {
+  summary: {
+    periode: {
+      debut: string;
+      fin: string;
+      nb_jours: number;
+    };
+    activite: {
+      jours_avec_activite: number;
+      jours_vides: number;
+      moyenne_heures_jour: number;
+      ecart_type: number;
+      total_heures: number;
+    };
+    anomalies: {
+      total: number;
+      par_severite: {
+        error: number;
+        warning: number;
+        info: number;
+      };
+    };
+  };
+  anomalies: Anomaly[];
+  incoherences: Incoherence[];
+  gaps: Gap[];
+  statistiques: {
+    pattern_hebdomadaire: Record<string, WeeklyPattern>;
+    distribution_quotidienne: {
+      moyenne: number;
+      ecart_type: number;
+      seuils: {
+        bas: number;
+        haut: number;
+      };
+    };
+  };
+  donnees_jour: Record<string, any>;
+}
+
+// === FONCTIONS EXISTANTES ===
+
 // Fonction pour générer un rapport (prévisualisation)
 const generateReportPreview = async (params: ReportParams): Promise<PreviewData[]> => {
   const response = await axios.post(`${API_URL}/generate-report`, {
@@ -41,6 +121,15 @@ const downloadReport = async (params: ReportParams): Promise<Blob> => {
   return response.data;
 };
 
+// === NOUVELLE FONCTION : ANALYSE INTELLIGENTE ===
+
+const analyzeData = async (params: DataAnalysisRequest): Promise<DataAnalysisResult> => {
+  const response = await axios.post(`${API_URL}/analyze-data`, params);
+  return response.data;
+};
+
+// === HOOKS EXISTANTS ===
+
 // Hook pour la génération de rapports avec React Query
 export const useReportGeneration = () => {
   const queryClient = useQueryClient();
@@ -49,7 +138,7 @@ export const useReportGeneration = () => {
   const previewMutation = useMutation({
     mutationFn: generateReportPreview,
     onSuccess: () => {
-      // Invalider le cache des rapports pour forcer la mise à jour
+      // Invalider le cache des rapports pour force la mise à jour
       queryClient.invalidateQueries({ queryKey: ['report'] });
     },
   });
@@ -95,6 +184,27 @@ export const useReportPreview = (
     enabled: enabled && !!startDate && !!endDate && selectedClients.length > 0,
     staleTime: 2 * 60 * 1000, // 2 minutes - les rapports peuvent changer
     gcTime: 5 * 60 * 1000,    // 5 minutes en cache
+  });
+};
+
+// === NOUVEAU HOOK : ANALYSE INTELLIGENTE ===
+
+export const useDataAnalysis = (
+  startDate: Dayjs | null,
+  endDate: Dayjs | null,
+  selectedClients: string[],
+  enabled: boolean = false
+) => {
+  return useQuery({
+    queryKey: ['data-analysis', startDate?.format('YYYY-MM-DD'), endDate?.format('YYYY-MM-DD'), selectedClients],
+    queryFn: () => analyzeData({
+      from_date: startDate!.format('YYYY-MM-DD'),
+      to_date: endDate!.format('YYYY-MM-DD'),
+      client_filter: selectedClients
+    }),
+    enabled: enabled && !!startDate && !!endDate && selectedClients.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes - l'analyse change peu
+    gcTime: 10 * 60 * 1000,   // 10 minutes en cache
   });
 };
 

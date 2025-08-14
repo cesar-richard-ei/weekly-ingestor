@@ -46,9 +46,10 @@ import {
 import { DatePicker } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
 import ReportStats from './ReportStats';
+import DataIntelligence from './DataIntelligence';
 import { useClientRates } from '../hooks/useClientRates';
 import { useClients, useClientNames } from '../hooks/useClients';
-import { useReportGeneration, useReportPreview, useUniqueClientsFromReport } from '../hooks/useReportGeneration';
+import { useReportGeneration, useReportPreview, useUniqueClientsFromReport, useDataAnalysis } from '../hooks/useReportGeneration';
 import ClientRatesEditor from './ClientRatesEditor';
 
 export interface PreviewData {
@@ -153,6 +154,13 @@ export default function ReportGenerator() {
   }, [filteredPreviewData]);
 
   const { getClientRate, lastUpdate } = useClientRates();
+
+  // Hook pour l'analyse intelligente des données
+  const { 
+    data: analysisData, 
+    isLoading: isLoadingAnalysis,
+    error: analysisError 
+  } = useDataAnalysis(startDate, endDate, selectedClients, activeStep === 3);
 
   // Validation des étapes
   const isStepValid = useCallback((step: number) => {
@@ -520,11 +528,39 @@ export default function ReportGenerator() {
                 </Typography>
                 
                 {previewData && previewData.length > 0 ? (
-                  <ReportStats 
-                    key={`stats-${lastUpdate}`}
-                    data={filteredPreviewData || []} 
-                    getClientRate={getClientRate} 
-                  />
+                  <>
+                    {/* Analyse intelligente des données */}
+                    {isLoadingAnalysis ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                        <Stack spacing={2} alignItems="center">
+                          <CircularProgress size={48} />
+                          <Typography variant="body1">
+                            Analyse intelligente en cours...
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    ) : analysisData ? (
+                      <DataIntelligence analysisData={analysisData} />
+                    ) : analysisError ? (
+                      <Alert severity="error">
+                        Erreur lors de l'analyse: {analysisError.message}
+                      </Alert>
+                    ) : (
+                      <Alert severity="info">
+                        Aucune donnée d'analyse disponible
+                      </Alert>
+                    )}
+                    
+                    <Divider sx={{ my: 4 }} />
+                    
+                    {/* Statistiques classiques */}
+                    <Box key={`stats-${lastUpdate}`}>
+                      <ReportStats 
+                        data={filteredPreviewData || []} 
+                        getClientRate={getClientRate} 
+                      />
+                    </Box>
+                  </>
                 ) : (
                   <Alert severity="info">
                     Aucune donnée disponible pour l'analyse
