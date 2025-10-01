@@ -715,9 +715,17 @@ def prepare_llm_prompt(analysis_data: dict) -> str:
     prompt = f"""
 Tu es un expert en audit de facturation freelance. Analyse la COHÉRENCE ET CRÉDIBILITÉ des imputations.
 
+MÉTHODE D'ANALYSE:
+1. PENSE étape par étape avant de répondre
+2. Analyse d'abord la structure des données
+3. Vérifie la cohérence facturation
+4. Évalue la crédibilité des tâches
+5. Détecte les patterns suspects
+6. Formule tes conclusions
+
 RÈGLES FACTURATION:
 - 1.0j = Tâches détaillées (pas d'OFF)
-- 0.5j = Tâches + OFF même journée  
+- 0.5j = Tâches + OFF même journée
 - 0j = Uniquement OFF (congé)
 
 RÈGLES CRÉDIBILITÉ:
@@ -731,7 +739,7 @@ DONNÉES À ANALYSER:
 
 TÂCHE OBLIGATOIRE: 
 1. Analyser VRAIMENT chaque jour dans les données
-2. Détecter TOUS les problèmes de cohérence facturation
+2. Détecter TOUS les problèmes de cohérence facturation et de crédibilité
 3. Si il n'y a pas de problèmes, expliquer pourquoi
 4. Si il y a des problèmes, les lister TOUS avec détails
 
@@ -739,8 +747,8 @@ EXEMPLES D'INSIGHTS ATTENDUS:
 - "Jour 15: OFF + tâches détectés, devrait être facturé 0.5j"
 - "Jour 20: Problème: OFF + tâches = 0.5j facturé au lieu de 1.0j"
 - "Jour 25: Problème: Tâches détaillées mais facturé 0.5j au lieu de 1.0j"
-- "Jour 30: Tâche légère 'Fix CI' - manque de détails sur la complexité"
-- "Jour 31: 2 jours consécutifs 'Debug CI' - pattern suspect, manque de précision"
+- "Jour 30: Tâche légère 'Fix divers' - manque de détails sur la complexité"
+- "Jour 31: 2 jours consécutifs 'Debug divers' - pattern suspect, manque de précision"
 
 RÈGLE: Alerter sur les INCOHÉRENCES facturation ET sur les problèmes de CRÉDIBILITÉ des tâches !
 
@@ -763,6 +771,7 @@ RÉPONSE JSON:
 }}
 
 IMPORTANT: 
+- PENSE étape par étape avant de répondre
 - Analyser VRAIMENT les données, pas juste retourner un template
 - Analyser le CONTENU des tâches, pas juste la facturation
 - Détecter les journées "légères", "imprécises" ou "suspectes"
@@ -780,10 +789,10 @@ async def call_ollama(prompt: str) -> str:
     """
     Appelle Ollama sur la machine distante
     """
-    ollama_url = "http://192.168.1.63:11434/api/generate"
+    ollama_url = "http://192.168.192.150:11434/api/generate"
 
     payload = {
-        "model": "mistral:7b",
+        "model": "mistral:latest",
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0.3, "top_p": 0.9, "max_tokens": 8000},
